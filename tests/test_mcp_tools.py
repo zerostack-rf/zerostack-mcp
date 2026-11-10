@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 import struct
@@ -15,6 +16,7 @@ from pathlib import Path
 
 import jsonschema
 import pytest
+from mcp.server.lowlevel.helper_types import ReadResourceContents
 
 from zerostack_mcp.catalog import load_diagnostics_catalog, load_remediation_meta
 from zerostack_mcp.models import (
@@ -357,6 +359,7 @@ def test_server_json_validates_against_2025_12_11_schema_and_packaging() -> None
     assert 'CMD ["zerostack-mcp"]' in dockerfile
     assert "ENTRYPOINT" not in dockerfile
     assert (REPO_ROOT / "glama.json").is_file()
+    assert not (REPO_ROOT / "smithery.yaml").exists()
     assert (REPO_ROOT / "llms.txt").is_file()
     llms_txt = (REPO_ROOT / "llms.txt").read_text(encoding="utf-8")
     assert (
@@ -811,6 +814,24 @@ def test_get_zerostack_benchmarks_all_f2_models_and_deduplication() -> None:
 
 
 def test_mcp_resources_bounded_prompt_and_cli_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    listed_resources = asyncio.run(mcp.list_resources())
+    assert {str(r.uri) for r in listed_resources} == {
+        "zerostack://benchmarks/summary",
+        "zerostack://hardware/supported-models",
+        "zerostack://diagnostics/catalog",
+    }
+    for res_meta in listed_resources:
+        assert res_meta.mime_type == "application/json"
+        dumped_meta = res_meta.model_dump(by_alias=True)
+        assert dumped_meta["mimeType"] == "application/json"
+        read_items = list(asyncio.run(mcp.read_resource(str(res_meta.uri))))
+        assert len(read_items) == 1
+        first_item = read_items[0]
+        assert isinstance(first_item, ReadResourceContents)
+        assert first_item.mime_type == "application/json"
+        parsed_item = json.loads(str(first_item.content))
+        assert isinstance(parsed_item, dict)
+
     summary_json = json.loads(resource_benchmarks_summary())
     assert summary_json["release"] == ZEROSTACK_RELEASE_NAME
     assert summary_json["marketing_url"] == ZEROSTACK_MARKETING_URL
