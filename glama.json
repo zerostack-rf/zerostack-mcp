@@ -1,6 +1,9 @@
 {
   "$schema": "https://glama.ai/mcp/schemas/server.json",
   "maintainers": [
-    "darkxst"
+    "darkxst",
+    "tl-sl",
+    "Tarik2142",
+    "gam_st"
   ]
 }
