@@ -339,7 +339,10 @@ def test_server_json_validates_against_2025_12_11_schema_and_packaging() -> None
     assert server_manifest["websiteUrl"] == ZEROSTACK_MARKETING_URL
     pyproject = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     expected_pypi_ver = str(pyproject["project"]["version"])
-    assert expected_pypi_ver == "0.9.9"
+    assert re.fullmatch(r"\d+\.\d+\.\d+", expected_pypi_ver)
+    for pkg in server_manifest.get("packages", []):
+        if pkg.get("registryType") == "pypi":
+            assert pkg["version"] == expected_pypi_ver
     assert __version__ == expected_pypi_ver
     assert MCP_SERVER_VERSION == expected_pypi_ver
     assert mcp.version == expected_pypi_ver
