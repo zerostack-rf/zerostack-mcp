@@ -152,19 +152,19 @@ def get_zerostack_benchmarks(platform: str) -> BenchmarkResult:
 get_zerostack_benchmark = get_zerostack_benchmarks
 
 
-@mcp.resource("zerostack://benchmarks/summary")
+@mcp.resource("zerostack://benchmarks/summary", mime_type="application/json")
 def resource_benchmarks_summary() -> str:
     """Return JSON summary of ZeroStack Part 1 & Part 2 hardware benchmarks."""
     return json.dumps(get_zerostack_benchmarks_impl("all"), indent=2)
 
 
-@mcp.resource("zerostack://hardware/supported-models")
+@mcp.resource("zerostack://hardware/supported-models", mime_type="application/json")
 def resource_supported_models() -> str:
     """Return JSON matrix of supported SMLIGHT TI SimpleLink F2 hardware models in Release Zero."""
     return json.dumps(build_supported_models_manifest(), indent=2)
 
 
-@mcp.resource("zerostack://diagnostics/catalog")
+@mcp.resource("zerostack://diagnostics/catalog", mime_type="application/json")
 def resource_diagnostics_catalog() -> str:
     """Return the declarative ZeroStack diagnosticsCatalog.json SSOT."""
     return load_catalog_json_text()
