@@ -8,12 +8,12 @@
     "source": "github"
   },
   "websiteUrl": "https://smlight.tech/software/zerostack",
-  "version": "0.9.9",
+  "version": "0.9.10",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "zerostack-mcp",
-      "version": "0.9.9",
+      "version": "0.9.10",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"
