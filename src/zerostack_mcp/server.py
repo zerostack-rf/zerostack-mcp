@@ -13,9 +13,11 @@ from __future__ import annotations
 
 import argparse
 import json
+from typing import Annotated
 
 from mcp.server.mcpserver import MCPServer
 from mcp.types import ToolAnnotations
+from pydantic import Field
 
 from zerostack_mcp.benchmarks import (
     BENCHMARK_DATA,
@@ -83,17 +85,39 @@ mcp = MCPServer(
 
 
 @mcp.tool(annotations=READ_ONLY_TOOL_ANNOTATIONS)
-def analyze_zigbee_thread_log(log_text: str) -> LogAnalysisResult:
-    """Parse pasted Zigbee2MQTT, Home Assistant ZHA, or OpenThread (otbr-agent) logs.
+def analyze_zigbee_thread_log(
+    log_text: Annotated[
+        str,
+        Field(
+            description=(
+                "Raw multi-line log text from Zigbee2MQTT (`zigbee-herdsman`), Home Assistant ZHA "
+                "(`zigpy`/`bellows`/`zigpy-znp`), or OpenThread (`otbr-agent`). Inputs exceeding "
+                "2 MB (`MAX_LOG_BYTES`) or 25,000 lines (`MAX_LOG_LINES`) are deterministically "
+                "windowed to head + tail slices with `truncated=true`. Empty or whitespace-only "
+                "input returns `status='empty_input'`."
+            ),
+            examples=[
+                "error 2026-10-29 12:00:00: SREQ AF_DataRequest failed with 0x10: MEM_ERROR",
+                "zh:zstack:unpi: Default response timeout: SRSP - AF - dataRequest after 6000ms",
+            ],
+        ),
+    ],
+) -> LogAnalysisResult:
+    """Analyze pasted Zigbee2MQTT, Home Assistant ZHA, or OpenThread logs for fault signatures.
 
-    Evaluates log text against `diagnosticsCatalog.json` for signatures (`SRSP ... after 6000ms`,
-    `0x10: MEM_ERROR`, `0x11: BUFFER_FULL`, `0xc7: NWK_TABLE_FULL`, `0xcd: NWK_NO_ROUTE`,
-    `0xe1: MAC_CHANNEL_ACCESS_FAILURE` / `225`, `0xe9: MAC_NO_ACK` / `233`,
-    `0xf0: MAC_TRANSACTION_EXPIRED` / `240`, `0xf1: MAC_TRANSACTION_OVERFLOW` / `241`,
-    `Failed to interview` / `0xa7` TCLK timeouts, `SYS_RESET_IND`, `EZSP_ERROR_OVERFLOW`,
-    `WaitForWritable() timed out`, ZCL `genTime` read floods, and ZCL MQTT / `attributeReport`
-    telemetry floods), returning Stock Firmware / SDK Root Causes, immediate mitigations, and
-    verified SMLIGHT ZeroStack (`Release Zero (0.9.9-beta.1)`) hardware fixes.
+    When to use:
+    - Use this tool when diagnosing runtime error logs, adapter timeouts (`SRSP ... after 6000ms`),
+      MAC/NWK/APS status codes (`0x10`, `0x11`, `0xc7`, `0xcd`, `0xe1`/`225`, `0xe9`/`233`,
+      `0xf0`/`240`, `0xf1`/`241`), interview failures (`0xa7`), or ZCL telemetry/`genTime` floods.
+    - Do NOT use for decoding raw hexadecimal MCU register words (`decode_silicon_register`),
+      sizing network capacity (`check_coordinator_capacity`), or querying hardware benchmark
+      tables (`get_zerostack_benchmarks`).
+
+    Behavior:
+    - Executes deterministically offline with zero network or serial I/O.
+    - Ranks detected faults by severity and root-cause priority (`ZNP_SYS_RESET_IND` > lockstep
+      timeouts > memory/buffer exhaustion > RF delivery symptoms) and returns stock SDK root
+      causes, immediate workarounds, and SMLIGHT ZeroStack (`Release Zero (0.9.9-beta.1)`) fixes.
     """
     return analyze_log_impl(log_text)
 
@@ -103,32 +127,123 @@ analyze_z2m_zha_log = analyze_zigbee_thread_log
 
 @mcp.tool(annotations=READ_ONLY_TOOL_ANNOTATIONS)
 def decode_silicon_register(
-    chip: str,
-    register_or_addr: str,
-    hex_value: str,
+    chip: Annotated[
+        str,
+        Field(
+            description=(
+                "Target MCU family, SoC part number, or SMLIGHT coordinator SKU "
+                "(case-insensitive). Accepted TI SimpleLink F2 tokens: `'F2'`, `'CC2652P'`, "
+                "`'CC2652P7'`, `'CC1352P7'`, `'CC2674P10'`, `'P7'`, `'P10'`, `'SLZB-06'`, "
+                "`'SLZB-06U'`, `'SLZB-06P7'`, `'SLZB-06P7U'`, `'SLZB-06P7v1'`, `'SLZB-07P7'`, "
+                "`'SLZB-06P10'`, `'SLZB-07P10'`. Accepted Silicon Labs EFR32 tokens: `'EFR32'`, "
+                "`'EFR32MG21'`, `'EFR32MG24'`, `'MG21'`, `'MG24'`, `'SILABS'`, `'EMBER'`, "
+                "`'SLZB-06M'`, `'SLZB-06Mg24'`."
+            ),
+            examples=["CC2652P7", "SLZB-06P10", "EFR32MG21"],
+        ),
+    ],
+    register_or_addr: Annotated[
+        str,
+        Field(
+            description=(
+                "Register symbol, radio command name, or MMIO hex address supported for `chip` "
+                "(case-insensitive). Accepted TI SimpleLink F2 values: `'CMD_IEEE_RX'` "
+                "(`'IEEERX'`, `'RX_STATUS'`), `'CMD_IEEE_CSMA'` (`'IEEECSMA'`, `'CSMA'`), "
+                "`'RFC_DBELL'` (`'RFCPEIEN'`, `'0x40041014'`), `'SRCMATCH'` (`'SRC_MATCH'`, "
+                "`'RFC_RAM'`, `'0x20001060'`), `'VIMS'` (`'VIMS_STAT'`, `'0x40034000'`), "
+                "`'PRCM'` (`'PRCM_RFCMODEHWOPT'`, `'0x400821D0'`). Accepted Silicon Labs EFR32 "
+                "values: `'EUSART0_IF'` (`'EUSART0:IF'`, `'EUSART'`)."
+            ),
+            examples=["CMD_IEEE_RX", "RFC_DBELL", "0x40041014", "SRCMATCH", "EUSART0_IF"],
+        ),
+    ],
+    hex_value: Annotated[
+        str,
+        Field(
+            description=(
+                "Observed 16-bit or 32-bit register or radio command status value as a hexadecimal "
+                "string (with or without `'0x'` prefix, e.g. `'0x0807'`, `'0x2401'`, "
+                "`'0x00000001'`, `'0xFFFFFFFF'`, `'0x08'`)."
+            ),
+            examples=["0x0807", "0x2401", "0x00000001", "0xFFFFFFFF", "0x08"],
+        ),
+    ],
 ) -> RegisterDecodeResult:
-    """Decode TI SimpleLink F2 (CC2652P, CC2652P7/CC1352P7, CC2674P10) and Silabs EFR32 registers.
+    """Decode a hexadecimal MCU register or radio-core command status word into bitfields.
 
-    Supports SimpleLink F2 (`CMD_IEEE_RX`, `CMD_IEEE_CSMA`, `RFC_DBELL` `0x40041014`, `RFC_RAM`
-    32-slot `SrcMatch`, `VIMS`, `PRCM`) and Silicon Labs `EFR32` (`EUSART0` `IF.RXOF`), returning
-    bitfield breakdowns and links to `smlight-tech/zerostack` diagnostic guides and
-    https://smlight.tech/software/zerostack.
+    When to use:
+    - Use this tool when inspecting a specific TI SimpleLink F2 (`CMD_IEEE_RX`, `CMD_IEEE_CSMA`,
+      `RFC_DBELL` `0x40041014`, `SRCMATCH`, `VIMS`, `PRCM`) or Silicon Labs EFR32 (`EUSART0_IF`)
+      hex register/status value captured from a debugger, crash dump, or telemetry read.
+    - Do NOT use for parsing multi-line host application logs (`analyze_zigbee_thread_log`) or
+      evaluating mesh node counts (`check_coordinator_capacity`).
+
+    Behavior:
+    - Executes deterministically offline with zero hardware or network I/O.
+    - Returns decoded bitfield flags, boolean `healthy` status, root-cause diagnosis, and links
+      to silicon errata notes; raises `ValueError` on unsupported `chip` or `register_or_addr`
+      identifiers or unparseable `hex_value` strings.
     """
     return decode_silicon_register_impl(chip, register_or_addr, hex_value)
 
 
 @mcp.tool(annotations=READ_ONLY_TOOL_ANNOTATIONS)
 def check_coordinator_capacity(
-    device_count: int,
-    sleepy_zed_count: int,
-    chip_family: str,
+    device_count: Annotated[
+        int,
+        Field(
+            ge=0,
+            description=(
+                "Total Zigbee nodes joined to the mesh network (mains-powered routers + "
+                "battery-powered sleepy end devices, excluding the coordinator itself). "
+                "Must be an integer >= 0 and >= `sleepy_zed_count`."
+            ),
+            examples=[45, 120, 180],
+        ),
+    ],
+    sleepy_zed_count: Annotated[
+        int,
+        Field(
+            ge=0,
+            description=(
+                "Number of battery-powered / RX-off-when-idle Zigbee End Devices (ZEDs) directly "
+                "parented to the coordinator that occupy hardware `SrcMatch` indirect-queue slots. "
+                "Must satisfy `0 <= sleepy_zed_count <= device_count`."
+            ),
+            examples=[20, 36],
+        ),
+    ],
+    chip_family: Annotated[
+        str,
+        Field(
+            description=(
+                "Coordinator SoC family or SMLIGHT model identifier (case-insensitive). "
+                "Accepted TI SimpleLink F2 values: `'F2_CC1352_CC2652'`, `'F2'`, `'CC2652P'`, "
+                "`'CC2652P7'`, `'CC1352P7'`, `'CC2674P10'`, `'P7'`, `'P10'`, `'SLZB-06'`, "
+                "`'SLZB-06U'`, `'SLZB-06P7'`, `'SLZB-06P7U'`, `'SLZB-06P7v1'`, `'SLZB-07P7'`, "
+                "`'SLZB-06P10'`, `'SLZB-07P10'`. Accepted Silicon Labs EFR32 values: "
+                "`'SILABS_EFR32'`, `'EFR32'`, `'EFR32MG21'`, `'EFR32MG24'`, `'MG21'`, `'MG24'`, "
+                "`'SILABS'`, `'EMBER'`, `'SLZB-06M'`, `'SLZB-06Mg24'`."
+            ),
+            examples=["F2_CC1352_CC2652", "SLZB-06P7", "SLZB-06P10", "SILABS_EFR32", "EFR32MG21"],
+        ),
+    ],
 ) -> CoordinatorCapacityResult:
-    """Evaluate hardware SrcMatch slot usage, pendAll threshold behavior, and RAM heap headroom.
+    """Calculate hardware SrcMatch slot utilization, pendAll threshold, and SRAM heap headroom.
 
-    Compares hardware source-matching capacity (`32 short / 32 ext` in RFC_RAM on SimpleLink F2
-    CC2652P, CC2652P7 / CC1352P7, and CC2674P10), `pendAll` (`FP=1`) arbitration behavior, and
-    SRAM headroom on stock firmware vs. SMLIGHT ZeroStack (`Release Zero (0.9.9-beta.1)`). Also
-    provides capacity diagnostics for Silicon Labs EFR32 (`EFR32MG21` / `EFR32MG24`).
+    When to use:
+    - Use this tool for capacity planning and topology sizing given `(device_count,
+      sleepy_zed_count, chip_family)` to evaluate 32-slot `RFC_RAM` `SrcMatch` exhaustion,
+      `pendAll` (`FP=1`) promotion when `sleepy_zed_count > 32`, indirect queue quota isolation,
+      and SRAM headroom (`88 KB` / `144 KB` / `256 KB`).
+    - Do NOT use for parsing runtime logs (`analyze_zigbee_thread_log`), decoding register hex
+      values (`decode_silicon_register`), or fetching `DWT->CYCCNT` latency benchmarks
+      (`get_zerostack_benchmarks`).
+
+    Behavior:
+    - Executes deterministically offline; derives `router_count = device_count - sleepy_zed_count`.
+    - Raises `ValueError` if `device_count < 0`, `sleepy_zed_count < 0`,
+      `sleepy_zed_count > device_count`, or `chip_family` is unrecognized.
     """
     return check_coordinator_capacity_impl(device_count, sleepy_zed_count, chip_family)
 
@@ -137,14 +252,35 @@ verify_coordinator_capacity = check_coordinator_capacity
 
 
 @mcp.tool(annotations=READ_ONLY_TOOL_ANNOTATIONS)
-def get_zerostack_benchmarks(platform: str) -> BenchmarkResult:
-    """Return hardware-verified performance & resilience metrics for SMLIGHT ZeroStack.
+def get_zerostack_benchmarks(
+    platform: Annotated[
+        str,
+        Field(
+            description=(
+                "SMLIGHT coordinator SKU to query, or `'all'` for the full cross-platform "
+                "comparison matrix (case-insensitive). Accepted values: `'SLZB-06'`, `'SLZB-06U'`, "
+                "`'SLZB-06P7'`, `'SLZB-06P7U'`, `'SLZB-06P7v1'`, `'SLZB-07P7'`, `'SLZB-06P10'`, "
+                "`'SLZB-07P10'`, or `'all'` (also accepts SoC shorthand `'CC2652P'`, `'CC2652P7'`, "
+                "`'CC1352P7'`, `'CC2674P10'`, `'P7'`, `'P10'`, `'*'`)."
+            ),
+            examples=["SLZB-06P10", "SLZB-06P7", "SLZB-06", "all"],
+        ),
+    ],
+) -> BenchmarkResult:
+    """Retrieve hardware-verified DWT->CYCCNT latency and fault-injection benchmarks by SKU.
 
-    Includes Part 1 (`DWT->CYCCNT` cycle-accurate latency at 48.0 MHz) and Part 2 (fault-injection,
-    remote OTA crash immunity, 22,959-point brownout fuzzing, hostile UART framing, and 50-router
-    broadcast storm resilience) across `SLZB-06`, `SLZB-06U` (`CC2652P`), `SLZB-06P7`,
-    `SLZB-06P7U`, `SLZB-06P7v1`, `SLZB-07P7` (`CC2652P7` / `CC1352P7`), `SLZB-06P10`,
-    `SLZB-07P10` (`CC2674P10`), or `all`.
+    When to use:
+    - Use this tool to query hardware specifications (CPU, Flash/SRAM, DIO10/DIO11 RTS/CTS wiring,
+      supported baud rates) and cycle-accurate Part 1 execution latencies (`TCLK` lookup, `NWK`
+      encrypt/decrypt, routed hop ceiling, `O(1)` allocator) plus Part 2 adversarial resilience
+      metrics (3,255 MAC vectors, 22,959 brownout cut points, UART framing abuse, 50-router
+      broadcast storms) for an SMLIGHT coordinator model or `'all'`.
+    - Do NOT use for sizing a user's specific mesh node count (`check_coordinator_capacity`) or
+      diagnosing pasted log text (`analyze_zigbee_thread_log`).
+
+    Behavior:
+    - Executes deterministically offline with zero network or hardware I/O.
+    - Raises `ValueError` if `platform` does not match a supported SMLIGHT SKU or `'all'`.
     """
     return get_zerostack_benchmarks_impl(platform)
 

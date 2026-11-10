@@ -814,6 +814,34 @@ def test_get_zerostack_benchmarks_all_f2_models_and_deduplication() -> None:
 
 
 def test_mcp_resources_bounded_prompt_and_cli_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    listed_tools = asyncio.run(mcp.list_tools())
+    assert {t.name for t in listed_tools} == {
+        "analyze_zigbee_thread_log",
+        "decode_silicon_register",
+        "check_coordinator_capacity",
+        "get_zerostack_benchmarks",
+    }
+    for tool_meta in listed_tools:
+        assert tool_meta.description is not None and len(tool_meta.description.strip()) >= 150
+        assert "When to use:" in tool_meta.description
+        assert "Behavior:" in tool_meta.description
+        dumped_tool = tool_meta.model_dump(by_alias=True)
+        assert "inputSchema" in dumped_tool
+        props = tool_meta.input_schema.get("properties")
+        assert isinstance(props, dict) and len(props) >= 1
+        for param_name, param_schema in props.items():
+            assert isinstance(param_schema, dict), (
+                f"Invalid schema for {tool_meta.name}.{param_name}"
+            )
+            desc = param_schema.get("description")
+            assert isinstance(desc, str) and len(desc.strip()) >= 40, (
+                f"Missing or short description on {tool_meta.name}.{param_name}"
+            )
+            examples = param_schema.get("examples")
+            assert isinstance(examples, list) and len(examples) >= 1, (
+                f"Missing examples on {tool_meta.name}.{param_name}"
+            )
+
     listed_resources = asyncio.run(mcp.list_resources())
     assert {str(r.uri) for r in listed_resources} == {
         "zerostack://benchmarks/summary",
