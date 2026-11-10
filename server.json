@@ -1,0 +1,23 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.zerostack-rf/zerostack-mcp",
+  "title": "SMLIGHT ZeroStack RF Diagnostics",
+  "description": "Zigbee/Thread log diagnostics, TI F2 & EFR32 register decoder, and ZeroStack hardware benchmarks.",
+  "repository": {
+    "url": "https://github.com/zerostack-rf/zerostack-mcp",
+    "source": "github"
+  },
+  "websiteUrl": "https://smlight.tech/software/zerostack",
+  "version": "0.9.9",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "zerostack-mcp",
+      "version": "0.9.9",
+      "runtimeHint": "uvx",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}

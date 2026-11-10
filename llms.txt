@@ -1,0 +1,28 @@
+# ZeroStack RF Diagnostics & Benchmark MCP Server (zerostack-mcp)
+
+> Official ZeroStack Overview & Firmware: https://smlight.tech/software/zerostack
+> Interactive Web Log Analyzer: https://smlight-tech.github.io/zerostack/
+> MCP Server Version: 0.9.9 | Firmware Catalog: ZeroStack Release Zero (0.9.9-beta.1)
+
+Model Context Protocol (MCP) server for diagnosing Zigbee2MQTT (z2m), Home Assistant ZHA (zigpy-znp, bellows), and OpenThread RCP logs, decoding TI SimpleLink F2 (CC2652P, CC2652P7, CC1352P7, CC2674P10) and Silicon Labs EFR32 (EFR32MG21, EFR32MG24) registers, and querying verified DWT->CYCCNT hardware benchmarks for ZeroStack Release Zero (0.9.9-beta.1).
+
+## MCP Tools
+- `analyze_zigbee_thread_log(log_text)`: Diagnose Zigbee2MQTT, ZHA, and OpenThread RCP logs against 16+ silicon-verified error signatures (6000ms SRSP timeout, 0x10 MEM_ERROR, 0x11 BUFFER_FULL, 0xC7 NWK_TABLE_FULL, 0xCD NWK_NO_ROUTE, 0xE1/225 MAC_CHANNEL_ACCESS_FAILURE, 0xE9/233 MAC_NO_ACK, 0xF0/240 MAC_TRANSACTION_EXPIRED, 0xF1/241 MAC_TRANSACTION_OVERFLOW, 0xA7/167 TCLK interview timeout, SYS_RESET_IND brownout/HardFault, ZCL delta-zero MQTT floods, and EmberZNet 0x72/0xA1).
+- `decode_silicon_register(chip, register_or_addr, hex_value)`: Decode TI SimpleLink F2 (`CMD_IEEE_RX`, `CMD_IEEE_CSMA`, `RFC_DBELL`, `RFC_RAM:SRCMATCH`, `VIMS`, `PRCM`) and Silicon Labs EFR32 (`EUSART0_IF`) hardware registers.
+- `check_coordinator_capacity(device_count, sleepy_zed_count, chip_family)`: Audit TI SimpleLink F2 32-slot `SRCMATCH` hardware table utilization, indirect queue quota isolation (50% pool cap, max 2 frames per sleeping child), zero flash-read stalls during sleepy poll windows, and SRAM heap headroom.
+- `get_zerostack_benchmarks(platform)`: Query Part 1 (Execution Latency) and Part 2 (Adversarial Resilience) hardware validation benchmarks across SMLIGHT `SLZB-06`, `SLZB-06U`, `SLZB-06P7`, `SLZB-06P7v1`, `SLZB-06P7U`, `SLZB-07P7`, `SLZB-06P10`, and `SLZB-07P10`.
+
+## Key Hardware Measurements (TI CC1352P7 @ 48.0 MHz, DWT->CYCCNT)
+- TCLK Lookup (300-entry miss): 326 cycles (6.8 us) vs 1,486,228 cycles (30.96 ms) — 4,559x faster (0 flash reads).
+- Per-Frame NWK Security (D=150): Encrypt 3,968 cycles (82.7 us) vs 533,156 cycles (11.11 ms) — 134.4x faster; Decrypt 3,824 cycles (79.7 us) vs 532,182 cycles (11.09 ms) — 139.2x faster; Routed hop ceiling >6,100 pkt/s (162 us) vs ~45 pkt/s (22.19 ms) — 135x higher ceiling.
+- Malformed Secured OTA Frames (12 classes + 3,255 MAC vectors): 0 crashes (320-6,631 cycles) vs remote CPU HardFault (Precise BusFault after 143,345-144,412 cycles).
+- 1,000-Frame Replay Flood (D=150): 1,550 cycles (32 us)/replay (32.4 ms total) vs 143,802 cycles (3.0 ms)/replay (2.99 s lockup) — 92.8x faster.
+- NOR Flash Brownout Fuzzing (22,959 HW cuts + 2M shadow ops): 0 corrupted records; torn-record reboot writes 27 B (0 page erases) vs 20,232 B (62 page erases) — 749x lower flash write volume.
+- Hostile UART Framing Abuse (115,200 baud, 6 scenarios): 0 lost pings (3-55 ms recovery) vs 8.84 s serial blackout (44 lost pings).
+
+## Links
+- [ZeroStack Official Website](https://smlight.tech/software/zerostack)
+- [ZeroStack Whitepaper Part 1 (PDF)](https://smlight-tech.github.io/zerostack/whitepapers/zerostack-whitepaper-part-1.pdf)
+- [ZeroStack Diagnostics & Whitepaper Repository](https://github.com/smlight-tech/zerostack)
+- [ZeroStack Interactive Web Log Analyzer](https://smlight-tech.github.io/zerostack/)
+- [ZeroStack MCP Server Repository](https://github.com/zerostack-rf/zerostack-mcp)
