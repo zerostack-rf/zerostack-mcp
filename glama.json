@@ -5,10 +5,5 @@
     "tl-sl",
     "Tarik2142",
     "gam_st"
-  ],
-  "relatedServers": [
-    "homeassistant-ai/ha-mcp",
-    "alexpfau/zigbee2mqtt-mcp",
-    "agentic-hil/agentic-hil"
   ]
 }
