@@ -684,13 +684,17 @@ def test_100k_line_log_bounded_truncation_and_sub_500ms_performance() -> None:
 
 
 def test_decode_silicon_register_f2_and_efr32() -> None:
-    rx_abort = decode_silicon_register("CC2652P7", "CMD_IEEE_RX", "0x0807")
+    rx_abort = decode_silicon_register("CC2652P7", "CMD_IEEE_RX", "0x2407")
     assert rx_abort["register"] == "CMD_IEEE_RX"
     assert rx_abort["healthy"] is False
-    assert rx_abort["bitfields"]["STATUS_NAME"] == "DONE_ABORT"
+    assert rx_abort["bitfields"]["STATUS_NAME"] == "IEEE_DONE_ABORT"
     assert rx_abort["marketing_url"] == ZEROSTACK_MARKETING_URL
     assert rx_abort["release"] == ZEROSTACK_RELEASE_NAME
     _assert_no_forbidden_terms(rx_abort)
+
+    rx_no_setup = decode_silicon_register("CC2652P7", "CMD_IEEE_RX", "0x0807")
+    assert rx_no_setup["healthy"] is False
+    assert rx_no_setup["bitfields"]["STATUS_NAME"] == "ERROR_NO_SETUP"
 
     rx_active = decode_silicon_register("SLZB-06P10", "CMD_IEEE_RX", "0x0002")
     assert rx_active["healthy"] is True
@@ -701,7 +705,14 @@ def test_decode_silicon_register_f2_and_efr32() -> None:
 
     dbell_stripped = decode_silicon_register("CC2652P", "RFC_DBELL", "0x00000001")
     assert dbell_stripped["healthy"] is False
-    assert dbell_stripped["bitfields"]["LAST_FG_CMD_DONE (Bit 1)"] == 0
+    assert dbell_stripped["bitfields"]["COMMAND_DONE (Bit 0)"] == 1
+    assert dbell_stripped["bitfields"]["LAST_COMMAND_DONE (Bit 1)"] == 0
+    assert dbell_stripped["bitfields"]["LAST_FG_COMMAND_DONE (Bit 3)"] == 0
+
+    dbell_healthy = decode_silicon_register("CC2652P", "0x40041014", "0x0000000A")
+    assert dbell_healthy["healthy"] is True
+    assert dbell_healthy["bitfields"]["LAST_COMMAND_DONE (Bit 1)"] == 1
+    assert dbell_healthy["bitfields"]["LAST_FG_COMMAND_DONE (Bit 3)"] == 1
 
     srcmatch_full = decode_silicon_register("SLZB-06P7", "SRCMATCH", "0xFFFFFFFF")
     assert srcmatch_full["healthy"] is False
@@ -714,17 +725,311 @@ def test_decode_silicon_register_f2_and_efr32() -> None:
     assert vims["bitfields"]["CACHE_ENABLED"] == 1
 
     prcm = decode_silicon_register("CC2652P", "PRCM", "0x00000002")
+    assert prcm["address"] == "0x400821d4"
     assert prcm["healthy"] is True
     assert prcm["bitfields"]["IEEE_802154_ENABLED (Bit 1)"] == 1
 
-    eusart = decode_silicon_register("EFR32MG21", "EUSART0_IF", "0x08")
+    prcm_p10 = decode_silicon_register("SLZB-06P10", "0x580821D4", "0x00000002")
+    assert prcm_p10["address"] == "0x580821d4"
+    assert prcm_p10["healthy"] is True
+
+    eusart = decode_silicon_register("EFR32MG24", "EUSART0_IF", "0x10")
+    assert eusart["address"] == "0x5b01004c"
     assert eusart["healthy"] is False
-    assert eusart["bitfields"]["RXOF (Bit 3)"] == 1
+    assert eusart["bitfields"]["RXOF (Bit 4)"] == 1
     assert "in active development" in eusart.get("zero_stack_remediation", "")
     _assert_no_forbidden_terms(eusart)
 
+    # 1. TI F2 UART0_FR (0x40001018): stuck CTS gating vs healthy idle
+    uart_fr_stuck = decode_silicon_register("SLZB-06P7", "UART0_FR", "0x00000028")
+    assert uart_fr_stuck["register"] == "UART0_FR"
+    assert uart_fr_stuck["address"] == "0x40001018"
+    assert uart_fr_stuck["healthy"] is False
+    assert uart_fr_stuck["bitfields"]["CTS (Bit 0)"] == 0
+    assert uart_fr_stuck["bitfields"]["BUSY (Bit 3)"] == 1
+    assert uart_fr_stuck["bitfields"]["TXFF (Bit 5)"] == 1
+    assert "CTS GATING" in uart_fr_stuck["diagnosis"]
+    _assert_no_forbidden_terms(uart_fr_stuck)
+
+    uart_fr_ok = decode_silicon_register("CC2652P", "0x40001018", "0x00000091")
+    assert uart_fr_ok["register"] == "UART0_FR"
+    assert uart_fr_ok["healthy"] is True
+    assert uart_fr_ok["bitfields"]["CTS (Bit 0)"] == 1
+    assert uart_fr_ok["bitfields"]["RXFE (Bit 4)"] == 1
+    assert uart_fr_ok["bitfields"]["TXFE (Bit 7)"] == 1
+
+    # 2. TI F2 UART0_RSR / UART0_ECR (0x40001004): OE | FE vs clean
+    uart_rsr_err = decode_silicon_register("CC1352P7", "UART0:RSR", "0x00000009")
+    assert uart_rsr_err["register"] == "UART0_RSR"
+    assert uart_rsr_err["address"] == "0x40001004"
+    assert uart_rsr_err["healthy"] is False
+    assert uart_rsr_err["bitfields"]["FE (Bit 0)"] == 1
+    assert uart_rsr_err["bitfields"]["OE (Bit 3)"] == 1
+    _assert_no_forbidden_terms(uart_rsr_err)
+
+    uart_rsr_ok = decode_silicon_register("CC2652P7", "0x40001004", "0x00000000")
+    assert uart_rsr_ok["register"] == "UART0_RSR"
+    assert uart_rsr_ok["healthy"] is True
+
+    # 3. TI F2 UART0_CTL (0x40001030): 4-wire vs 2-wire vs loopback fault
+    uart_ctl_4w = decode_silicon_register("SLZB-06P10", "UART0_CTL", "0x0000C301")
+    assert uart_ctl_4w["register"] == "UART0_CTL"
+    assert uart_ctl_4w["address"] == "0x40001030"
+    assert uart_ctl_4w["healthy"] is True
+    assert uart_ctl_4w["bitfields"]["UARTEN (Bit 0)"] == 1
+    assert uart_ctl_4w["bitfields"]["TXE (Bit 8)"] == 1
+    assert uart_ctl_4w["bitfields"]["RXE (Bit 9)"] == 1
+    assert uart_ctl_4w["bitfields"]["RTSEN (Bit 14)"] == 1
+    assert uart_ctl_4w["bitfields"]["CTSEN (Bit 15)"] == 1
+    assert "4-WIRE" in uart_ctl_4w["diagnosis"]
+    _assert_no_forbidden_terms(uart_ctl_4w)
+
+    uart_ctl_2w = decode_silicon_register("SLZB-06", "0x40001030", "0x00000301")
+    assert uart_ctl_2w["healthy"] is True
+    assert uart_ctl_2w["bitfields"]["CTSEN (Bit 15)"] == 0
+    assert "2-WIRE" in uart_ctl_2w["diagnosis"]
+
+    uart_ctl_lbe = decode_silicon_register("CC2652P", "UART0:CTL", "0x00000381")
+    assert uart_ctl_lbe["healthy"] is False
+    assert uart_ctl_lbe["bitfields"]["LBE (Bit 7)"] == 1
+
+    # 4. TI F2 IOCFG (0x40081000..0x4008107C): default GPIO, floating CTS, pull-up CTS, RFC_GPO0
+    iocfg_dio10_default = decode_silicon_register("SLZB-06P7", "0x40081028", "0x00006000")
+    assert iocfg_dio10_default["register"] == "IOCFG10"
+    assert iocfg_dio10_default["address"] == "0x40081028"
+    assert iocfg_dio10_default["healthy"] is False
+    assert iocfg_dio10_default["bitfields"]["DIO_INDEX"] == 10
+    assert iocfg_dio10_default["bitfields"]["PORT_ID (Bits 5:0)"] == "0x00"
+    assert iocfg_dio10_default["bitfields"]["PORT_NAME"] == "GPIO"
+    assert iocfg_dio10_default["bitfields"]["PULL_CTL (Bits 14:13)"] == 3
+    assert iocfg_dio10_default["bitfields"]["PULL_MODE"] == "NO_PULL"
+    _assert_no_forbidden_terms(iocfg_dio10_default)
+
+    iocfg_cts_floating = decode_silicon_register("SLZB-06P7v1", "IOCFG11", "0x20006011")
+    assert iocfg_cts_floating["register"] == "IOCFG11"
+    assert iocfg_cts_floating["address"] == "0x4008102c"
+    assert iocfg_cts_floating["healthy"] is False
+    assert iocfg_cts_floating["bitfields"]["DIO_INDEX"] == 11
+    assert iocfg_cts_floating["bitfields"]["PORT_NAME"] == "UART0_CTS"
+    assert iocfg_cts_floating["bitfields"]["IE (Bit 29)"] == 1
+    assert iocfg_cts_floating["bitfields"]["PULL_MODE"] == "NO_PULL"
+    assert "FLOATING UART0_CTS" in iocfg_cts_floating["diagnosis"]
+    _assert_no_forbidden_terms(iocfg_cts_floating)
+
+    iocfg_cts_pullup = decode_silicon_register("SLZB-06P7U", "0x4008102C", "0x60004011")
+    assert iocfg_cts_pullup["healthy"] is True
+    assert iocfg_cts_pullup["bitfields"]["PORT_NAME"] == "UART0_CTS"
+    assert iocfg_cts_pullup["bitfields"]["PULL_MODE"] == "PULL_UP"
+    assert iocfg_cts_pullup["bitfields"]["IE (Bit 29)"] == 1
+    assert iocfg_cts_pullup["bitfields"]["HYST_EN (Bit 30)"] == 1
+
+    iocfg_rf_gpo0 = decode_silicon_register("CC2652P7", "0x40081074", "0x0000602F")
+    assert iocfg_rf_gpo0["register"] == "IOCFG29"
+    assert iocfg_rf_gpo0["healthy"] is True
+    assert iocfg_rf_gpo0["bitfields"]["PORT_NAME"] == "RFC_GPO0"
+
+    # 5. TI F2 AON_PMCTL_RESETCTL (0x40090028 / 0x58090028): VDDS_LOSS & WARMRESET vs PWR_ON
+    reset_vdds = decode_silicon_register("SLZB-06P7", "AON_PMCTL:RESETCTL", "0x00000104")
+    assert reset_vdds["register"] == "AON_PMCTL_RESETCTL"
+    assert reset_vdds["address"] == "0x40090028"
+    assert reset_vdds["healthy"] is False
+    assert reset_vdds["bitfields"]["RESET_SRC (Bits 3:1)"] == 2
+    assert reset_vdds["bitfields"]["RESET_SRC_NAME"] == "VDDS_LOSS"
+    assert reset_vdds["bitfields"]["VDDS_LOSS_EN (Bit 8)"] == 1
+    assert "22,959" in reset_vdds["diagnosis"]
+    _assert_no_forbidden_terms(reset_vdds)
+
+    reset_warm = decode_silicon_register("CC2652P", "0x40090028", "0x0000801E")
+    assert reset_warm["healthy"] is False
+    assert reset_warm["bitfields"]["RESET_SRC (Bits 3:1)"] == 7
+    assert reset_warm["bitfields"]["RESET_SRC_NAME"] == "WARMRESET"
+    assert reset_warm["bitfields"]["MCU_WARM_RESET (Bit 4)"] == 1
+    assert reset_warm["bitfields"]["WU_FROM_SD (Bit 15)"] == 1
+
+    reset_por = decode_silicon_register("SLZB-06P10", "RESETCTL", "0x000001E0")
+    assert reset_por["address"] == "0x58090028"
+    assert reset_por["healthy"] is True
+    assert reset_por["bitfields"]["RESET_SRC_NAME"] == "PWR_ON"
+    assert reset_por["bitfields"]["CLK_LOSS_EN (Bit 5)"] == 1
+    assert reset_por["bitfields"]["VDD_LOSS_EN (Bit 6)"] == 1
+    assert reset_por["bitfields"]["VDDR_LOSS_EN (Bit 7)"] == 1
+    assert reset_por["bitfields"]["VDDS_LOSS_EN (Bit 8)"] == 1
+
+    # 6. Silicon Labs EFR32 EMU_RSTCAUSE (0x50004094): WDOG0 | LOCKUP vs POR
+    emu_fault = decode_silicon_register("EFR32MG21", "EMU:RSTCAUSE", "0x00000028")
+    assert emu_fault["register"] == "EMU_RSTCAUSE"
+    assert emu_fault["address"] == "0x50004094"
+    assert emu_fault["healthy"] is False
+    assert emu_fault["bitfields"]["WDOG0 (Bit 3)"] == 1
+    assert emu_fault["bitfields"]["LOCKUP (Bit 5)"] == 1
+    _assert_no_forbidden_terms(emu_fault)
+
+    emu_por = decode_silicon_register("SLZB-06M", "0x50004094", "0x00000001")
+    assert emu_por["healthy"] is True
+    assert emu_por["bitfields"]["POR (Bit 0)"] == 1
+
+    # 7. Silicon Labs EFR32 USART0_IF (0x50058048 / 0x5005C048) vs USART0_STATUS (0x50058018)
+    usart_if_err = decode_silicon_register("EFR32MG21", "USART0_IF", "0x00000210")
+    assert usart_if_err["register"] == "USART0_IF"
+    assert usart_if_err["address"] == "0x50058048"
+    assert usart_if_err["healthy"] is False
+    assert usart_if_err["bitfields"]["RXOF (Bit 4)"] == 1
+    assert usart_if_err["bitfields"]["FERR (Bit 9)"] == 1
+    _assert_no_forbidden_terms(usart_if_err)
+
+    usart_if_mg24 = decode_silicon_register("EFR32MG24", "0x5005C048", "0x00000002")
+    assert usart_if_mg24["address"] == "0x5005c048"
+    assert usart_if_mg24["healthy"] is True
+
+    usart_status_ok = decode_silicon_register("EFR32MG21", "USART0:STATUS", "0x00002063")
+    assert usart_status_ok["register"] == "USART0_STATUS"
+    assert usart_status_ok["address"] == "0x50058018"
+    assert usart_status_ok["healthy"] is True
+    assert usart_status_ok["bitfields"]["RXENS (Bit 0)"] == 1
+    assert usart_status_ok["bitfields"]["TXENS (Bit 1)"] == 1
+    assert usart_status_ok["bitfields"]["TXTRI (Bit 4)"] == 0
+    assert usart_status_ok["bitfields"]["TXC (Bit 5)"] == 1
+    assert usart_status_ok["bitfields"]["TXBL (Bit 6)"] == 1
+    assert usart_status_ok["bitfields"]["TXIDLE (Bit 13)"] == 1
+    _assert_no_forbidden_terms(usart_status_ok)
+
+    # 8. Universal ARM Cortex-M4 / Cortex-M33 SCB_CFSR (0xE000ED28)
+    cfsr_precis = decode_silicon_register("CC2652P7", "SCB:CFSR", "0x00008200")
+    assert cfsr_precis["register"] == "SCB_CFSR"
+    assert cfsr_precis["address"] == "0xe000ed28"
+    assert cfsr_precis["healthy"] is False
+    assert cfsr_precis["bitfields"]["PRECISERR (Bit 9)"] == 1
+    assert cfsr_precis["bitfields"]["BFARVALID (Bit 15)"] == 1
+    assert "0xE000ED38" in cfsr_precis["diagnosis"]
+    _assert_no_forbidden_terms(cfsr_precis)
+
+    cfsr_stkof = decode_silicon_register("CORTEX-M33", "0xE000ED28", "0x00120000")
+    assert cfsr_stkof["healthy"] is False
+    assert cfsr_stkof["bitfields"]["INVSTATE (Bit 17)"] == 1
+    assert cfsr_stkof["bitfields"]["STKOF (Bit 20)"] == 1
+    assert "MSPLIM" in cfsr_stkof["diagnosis"]
+    _assert_no_forbidden_terms(cfsr_stkof)
+
+    cfsr_clean = decode_silicon_register("ARM", "CFSR", "0x00000000")
+    assert cfsr_clean["healthy"] is True
+
+    # 9. Universal ARM Cortex-M4 / Cortex-M33 SCB_HFSR (0xE000ED2C)
+    hfsr_forced = decode_silicon_register("EFR32MG24", "SCB_HFSR", "0x40000002")
+    assert hfsr_forced["register"] == "SCB_HFSR"
+    assert hfsr_forced["address"] == "0xe000ed2c"
+    assert hfsr_forced["healthy"] is False
+    assert hfsr_forced["bitfields"]["VECTTBL (Bit 1)"] == 1
+    assert hfsr_forced["bitfields"]["FORCED (Bit 30)"] == 1
+    assert "0xE000ED28" in hfsr_forced["diagnosis"]
+    _assert_no_forbidden_terms(hfsr_forced)
+
+    hfsr_clean = decode_silicon_register("CORTEX-M4", "0xE000ED2C", "0x00000000")
+    assert hfsr_clean["healthy"] is True
+
+    # 10. CC2674P10 / SLZB-06P10 (`cc13x4_cc26x4`) & EFR32 S/NS raw-hex parity assertions
+    p10_uart_fr = decode_silicon_register("SLZB-06P10", "0x40001018", "0x00000091")
+    assert p10_uart_fr["register"] == "UART0_FR"
+    assert p10_uart_fr["address"] == "0x40001018"
+    assert p10_uart_fr["healthy"] is True
+
+    p10_iocfg10 = decode_silicon_register("SLZB-06P10", "0x40081028", "0x0000C000")
+    assert p10_iocfg10["register"] == "IOCFG10"
+    assert p10_iocfg10["address"] == "0x40081028"
+    assert p10_iocfg10["healthy"] is False
+    assert p10_iocfg10["bitfields"]["DIO_INDEX"] == 10
+    assert p10_iocfg10["bitfields"]["PORT_ID (Bits 6:0)"] == "0x00"
+    assert p10_iocfg10["bitfields"]["PULL_CTL (Bits 15:14)"] == 3
+    assert p10_iocfg10["bitfields"]["SLEW_RED (Bit 13)"] == 0
+    assert p10_iocfg10["bitfields"]["PULL_MODE"] == "NO_PULL"
+
+    p10_iocfg11_cts = decode_silicon_register("CC2674P10", "0x4008102C", "0x60008011")
+    assert p10_iocfg11_cts["register"] == "IOCFG11"
+    assert p10_iocfg11_cts["healthy"] is True
+    assert p10_iocfg11_cts["bitfields"]["PORT_ID (Bits 6:0)"] == "0x11"
+    assert p10_iocfg11_cts["bitfields"]["PORT_NAME"] == "UART0_CTS"
+    assert p10_iocfg11_cts["bitfields"]["PULL_CTL (Bits 15:14)"] == 2
+    assert p10_iocfg11_cts["bitfields"]["PULL_MODE"] == "PULL_UP"
+
+    p10_iocfg47 = decode_silicon_register("SLZB-06P10", "0x400810BC", "0x2000C04A")
+    assert p10_iocfg47["register"] == "IOCFG47"
+    assert p10_iocfg47["address"] == "0x400810bc"
+    assert p10_iocfg47["bitfields"]["DIO_INDEX"] == 47
+    assert p10_iocfg47["bitfields"]["PORT_ID (Bits 6:0)"] == "0x4a"
+    assert p10_iocfg47["bitfields"]["PORT_NAME"] == "I2C1_MSSCL"
+
+    p10_vims = decode_silicon_register("CC2674P10", "0x40034000", "0x00000031")
+    assert p10_vims["register"] == "VIMS_STAT"
+    assert p10_vims["address"] == "0x40034000"
+    assert p10_vims["healthy"] is True
+    assert p10_vims["bitfields"]["CACHE_ENABLED"] == 1
+    assert p10_vims["bitfields"]["SYSBUS_LB_DIS (Bit 4)"] == 1
+    assert p10_vims["bitfields"]["IDCODE_LB_DIS (Bit 5)"] == 1
+
+    p10_dbell = decode_silicon_register("SLZB-06P10", "0x40041014", "0x0000000A")
+    assert p10_dbell["register"] == "RFC_DBELL"
+    assert p10_dbell["address"] == "0x40041014"
+    assert p10_dbell["healthy"] is True
+
+    p10_srcmatch = decode_silicon_register("CC2674P10", "0x21000000", "0x0000000F")
+    assert p10_srcmatch["register"] == "SRCMATCH"
+    assert p10_srcmatch["healthy"] is True
+    assert p10_srcmatch["bitfields"]["OCCUPIED_SLOTS"] == 4
+
+    p10_resetctl_s = decode_silicon_register("SLZB-06P10", "0x58090028", "0x000001E0")
+    assert p10_resetctl_s["register"] == "AON_PMCTL_RESETCTL"
+    assert p10_resetctl_s["address"] == "0x58090028"
+    assert p10_resetctl_s["healthy"] is True
+
+    p10_resetctl_ns = decode_silicon_register("CC2674P10", "0x48090028", "0x000001E0")
+    assert p10_resetctl_ns["register"] == "AON_PMCTL_RESETCTL"
+    assert p10_resetctl_ns["address"] == "0x48090028"
+    assert p10_resetctl_ns["healthy"] is True
+
+    p10_prcm_ns = decode_silicon_register("SLZB-06P10", "0x480821D4", "0x00000002")
+    assert p10_prcm_ns["register"] == "PRCM_RFCMODEHWOPT"
+    assert p10_prcm_ns["address"] == "0x480821d4"
+    assert p10_prcm_ns["healthy"] is True
+
+    efr_emu_s = decode_silicon_register("EFR32MG24", "0x40004094", "0x00000001")
+    assert efr_emu_s["register"] == "EMU_RSTCAUSE"
+    assert efr_emu_s["address"] == "0x40004094"
+    assert efr_emu_s["healthy"] is True
+
+    efr_eusart_s = decode_silicon_register("EFR32MG24", "0x4B01004C", "0x00000002")
+    assert efr_eusart_s["register"] == "EUSART0_IF"
+    assert efr_eusart_s["address"] == "0x4b01004c"
+    assert efr_eusart_s["healthy"] is True
+
+    efr_usart_if_s_mg21 = decode_silicon_register("EFR32MG21", "0x40058048", "0x00000002")
+    assert efr_usart_if_s_mg21["address"] == "0x40058048"
+    assert efr_usart_if_s_mg21["healthy"] is True
+
+    efr_usart_if_s_mg24 = decode_silicon_register("EFR32MG24", "0x4005C048", "0x00000002")
+    assert efr_usart_if_s_mg24["address"] == "0x4005c048"
+    assert efr_usart_if_s_mg24["healthy"] is True
+
+    efr_usart_st_s_mg21 = decode_silicon_register("EFR32MG21", "0x40058018", "0x00002063")
+    assert efr_usart_st_s_mg21["address"] == "0x40058018"
+    assert efr_usart_st_s_mg21["healthy"] is True
+
+    efr_usart_st_ns_mg24 = decode_silicon_register("EFR32MG24", "0x5005C018", "0x00002063")
+    assert efr_usart_st_ns_mg24["address"] == "0x5005c018"
+    assert efr_usart_st_ns_mg24["healthy"] is True
+
+    efr_usart_st_s_mg24 = decode_silicon_register("EFR32MG24", "0x4005C018", "0x00002063")
+    assert efr_usart_st_s_mg24["address"] == "0x4005c018"
+    assert efr_usart_st_s_mg24["healthy"] is True
+
+    glama_json = json.loads((REPO_ROOT / "glama.json").read_text(encoding="utf-8"))
+    assert glama_json["$schema"] == "https://glama.ai/mcp/schemas/server.json"
+    assert isinstance(glama_json["maintainers"], list) and len(glama_json["maintainers"]) >= 1
+
     with pytest.raises(ValueError, match="Unsupported chip"):
         decode_silicon_register("UNKNOWN_CHIP", "CMD_IEEE_RX", "0x01")
+    with pytest.raises(ValueError, match="Unknown ARM Cortex-M SCB register"):
+        decode_silicon_register("ARM", "CMD_IEEE_RX", "0x01")
+    with pytest.raises(ValueError, match="Unknown Silicon Labs EFR32 register"):
+        decode_silicon_register("EFR32MG21", "CMD_IEEE_RX", "0x01")
 
 
 def test_check_coordinator_capacity_f2_and_efr32() -> None:

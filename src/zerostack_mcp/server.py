@@ -131,15 +131,16 @@ def decode_silicon_register(
         str,
         Field(
             description=(
-                "Target MCU family, SoC part number, or SMLIGHT coordinator SKU "
-                "(case-insensitive). Accepted TI SimpleLink F2 tokens: `'F2'`, `'CC2652P'`, "
-                "`'CC2652P7'`, `'CC1352P7'`, `'CC2674P10'`, `'P7'`, `'P10'`, `'SLZB-06'`, "
-                "`'SLZB-06U'`, `'SLZB-06P7'`, `'SLZB-06P7U'`, `'SLZB-06P7v1'`, `'SLZB-07P7'`, "
-                "`'SLZB-06P10'`, `'SLZB-07P10'`. Accepted Silicon Labs EFR32 tokens: `'EFR32'`, "
-                "`'EFR32MG21'`, `'EFR32MG24'`, `'MG21'`, `'MG24'`, `'SILABS'`, `'EMBER'`, "
-                "`'SLZB-06M'`, `'SLZB-06Mg24'`."
+                "Target MCU family, SoC part number, SMLIGHT coordinator SKU, or ARM Cortex-M "
+                "core token (case-insensitive). Accepted TI SimpleLink F2 tokens: `'F2'`, "
+                "`'CC2652P'`, `'CC2652P7'`, `'CC1352P7'`, `'CC2674P10'`, `'P7'`, `'P10'`, "
+                "`'SLZB-06'`, `'SLZB-06U'`, `'SLZB-06P7'`, `'SLZB-06P7U'`, `'SLZB-06P7v1'`, "
+                "`'SLZB-07P7'`, `'SLZB-06P10'`, `'SLZB-07P10'`. Accepted Silicon Labs EFR32 "
+                "tokens: `'EFR32'`, `'EFR32MG21'`, `'EFR32MG24'`, `'MG21'`, `'MG24'`, "
+                "`'SILABS'`, `'EMBER'`, `'SLZB-06M'`, `'SLZB-06Mg24'`. Accepted universal ARM "
+                "SCB fault tokens: `'ARM'`, `'CORTEX-M'`, `'CORTEX-M4'`, `'CORTEX-M33'`."
             ),
-            examples=["CC2652P7", "SLZB-06P10", "EFR32MG21"],
+            examples=["CC2652P7", "SLZB-06P10", "EFR32MG21", "CORTEX-M33"],
         ),
     ],
     register_or_addr: Annotated[
@@ -147,14 +148,31 @@ def decode_silicon_register(
         Field(
             description=(
                 "Register symbol, radio command name, or MMIO hex address supported for `chip` "
-                "(case-insensitive). Accepted TI SimpleLink F2 values: `'CMD_IEEE_RX'` "
-                "(`'IEEERX'`, `'RX_STATUS'`), `'CMD_IEEE_CSMA'` (`'IEEECSMA'`, `'CSMA'`), "
-                "`'RFC_DBELL'` (`'RFCPEIEN'`, `'0x40041014'`), `'SRCMATCH'` (`'SRC_MATCH'`, "
-                "`'RFC_RAM'`, `'0x20001060'`), `'VIMS'` (`'VIMS_STAT'`, `'0x40034000'`), "
-                "`'PRCM'` (`'PRCM_RFCMODEHWOPT'`, `'0x400821D0'`). Accepted Silicon Labs EFR32 "
-                "values: `'EUSART0_IF'` (`'EUSART0:IF'`, `'EUSART'`)."
+                "(case-insensitive). TI SimpleLink F2 values: `'CMD_IEEE_RX'`, `'CMD_IEEE_CSMA'`, "
+                "`'RFC_DBELL'` (`'0x40041014'`), `'SRCMATCH'` (`'RFC_RAM'`, `'0x21000000'`), "
+                "`'VIMS'` (`'0x40034000'`), `'PRCM'` (`'0x400821D4'`, `'0x580821D4'`, "
+                "`'0x480821D4'`), `'UART0_FR'` (`'0x40001018'`), `'UART0_RSR'` (`'UART0_ECR'`, "
+                "`'0x40001004'`), `'UART0_CTL'` (`'0x40001030'`), `'IOCFG'` (`'IOCFG0'`.."
+                "`'IOCFG47'`, `'0x40081000'`..`'0x400810BC'`), `'AON_PMCTL_RESETCTL'` "
+                "(`'RESETCTL'`, `'0x40090028'`, `'0x58090028'`, `'0x48090028'`). Silicon Labs "
+                "EFR32 values: `'EUSART0_IF'` (`'0x5B01004C'`, `'0x4B01004C'`), `'USART0_IF'` "
+                "(`'0x50058048'` / `'0x40058048'` on MG21, `'0x5005C048'` / `'0x4005C048'` on "
+                "MG24), `'USART0_STATUS'` (`'0x50058018'` / `'0x40058018'` on MG21, "
+                "`'0x5005C018'` / `'0x4005C018'` on MG24), `'EMU_RSTCAUSE'` (`'RSTCAUSE'`, "
+                "`'0x50004094'`, `'0x40004094'`). Universal ARM Cortex-M4/M33 values (accepted on "
+                "F2, EFR32, or `'ARM'`/`'CORTEX-M'`): `'SCB_CFSR'` (`'CFSR'`, `'0xE000ED28'`), "
+                "`'SCB_HFSR'` (`'HFSR'`, `'0xE000ED2C'`)."
             ),
-            examples=["CMD_IEEE_RX", "RFC_DBELL", "0x40041014", "SRCMATCH", "EUSART0_IF"],
+            examples=[
+                "CMD_IEEE_RX",
+                "RFC_DBELL",
+                "UART0_FR",
+                "IOCFG11",
+                "AON_PMCTL_RESETCTL",
+                "EUSART0_IF",
+                "EMU_RSTCAUSE",
+                "SCB_CFSR",
+            ],
         ),
     ],
     hex_value: Annotated[
@@ -163,18 +181,20 @@ def decode_silicon_register(
             description=(
                 "Observed 16-bit or 32-bit register or radio command status value as a hexadecimal "
                 "string (with or without `'0x'` prefix, e.g. `'0x0807'`, `'0x2401'`, "
-                "`'0x00000001'`, `'0xFFFFFFFF'`, `'0x08'`)."
+                "`'0x00000028'`, `'0x00008200'`, `'0x40000000'`)."
             ),
-            examples=["0x0807", "0x2401", "0x00000001", "0xFFFFFFFF", "0x08"],
+            examples=["0x0807", "0x2401", "0x00000028", "0x20006011", "0x00008200", "0x40000000"],
         ),
     ],
 ) -> RegisterDecodeResult:
     """Decode a hexadecimal MCU register or radio-core command status word into bitfields.
 
     When to use:
-    - Use this tool when inspecting a specific TI SimpleLink F2 (`CMD_IEEE_RX`, `CMD_IEEE_CSMA`,
-      `RFC_DBELL` `0x40041014`, `SRCMATCH`, `VIMS`, `PRCM`) or Silicon Labs EFR32 (`EUSART0_IF`)
-      hex register/status value captured from a debugger, crash dump, or telemetry read.
+    - Use this tool when inspecting a TI SimpleLink F2 (`CMD_IEEE_RX`, `CMD_IEEE_CSMA`,
+      `RFC_DBELL`, `SRCMATCH`, `VIMS`, `PRCM`, `UART0_FR`, `UART0_RSR`, `UART0_CTL`, `IOCFG0..31`,
+      `AON_PMCTL_RESETCTL`), Silicon Labs EFR32 (`EUSART0_IF`, `USART0_IF`, `USART0_STATUS`,
+      `EMU_RSTCAUSE`), or ARM Cortex-M4/M33 (`SCB_CFSR` `0xE000ED28`, `SCB_HFSR` `0xE000ED2C`)
+      hex register/status value captured from SWD/JTAG, a crash dump, or telemetry.
     - Do NOT use for parsing multi-line host application logs (`analyze_zigbee_thread_log`) or
       evaluating mesh node counts (`check_coordinator_capacity`).
 
