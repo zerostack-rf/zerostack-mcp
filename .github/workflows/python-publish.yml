@@ -54,4 +54,19 @@ jobs:
 
       - name: Publish package
         uses: pypa/gh-action-pypi-publish@release/v1
-
+  mcp-registry-publish:
+    name: Publish server to Official MCP Registry
+    runs-on: ubuntu-latest
+    needs:
+      - pypi-publish
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install mcp-publisher & publish via GitHub OIDC
+        run: |
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin mcp-publisher
+          mcp-publisher login github-oidc
+          mcp-publisher publish
