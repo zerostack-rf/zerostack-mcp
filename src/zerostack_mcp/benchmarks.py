@@ -14,6 +14,8 @@ from zerostack_mcp.models import (
     ZEROSTACK_RELEASE_NAME,
     ZEROSTACK_REPO_URL,
     ZEROSTACK_WEB_ANALYZER_URL,
+    ZEROSTACK_WHITEPAPER_MD_URL,
+    ZEROSTACK_WHITEPAPER_PDF_URL,
     AllPlatformsBenchmarkResult,
     BenchmarkMetricValue,
     BenchmarkResult,
@@ -115,9 +117,7 @@ PART1_EXECUTION_BENCHMARKS: dict[str, dict[str, BenchmarkMetricValue]] = {
     },
     "nvm_compaction_frequency": {
         "legacy_first_compaction_write": 69,
-        "legacy_compaction_stall_ms": 163.9,
         "zerostack_first_compaction_write": 1013,
-        "zerostack_compaction_stall_ms": 13.7,
         "compaction_frequency_reduction_x": 14.7,
     },
     "dynamic_memory_malloc_64_holes": {
@@ -155,9 +155,7 @@ PART1_EXECUTION_BENCHMARKS: dict[str, dict[str, BenchmarkMetricValue]] = {
         "msg_receive_speedup_q64_x": 1.89,
         "complexity": "O(1)",
     },
-    "host_serial_sys_ping_115200": {
-        "legacy_total_cycles": 9790,
-        "zerostack_total_cycles": 4618,
+    "host_serial_sys_ping": {
         "total_cycle_reduction_pct": 53.0,
         "legacy_reply_cycles": 4921,
         "zerostack_reply_cycles": 816,
@@ -173,9 +171,8 @@ PART2_RESILIENCE_BENCHMARKS: dict[str, dict[str, BenchmarkMetricValue]] = {
         "nwk_aps_fault_classes_tested": 12,
         "mac_boundary_vectors_tested": 3255,
         "legacy_behavior": (
-            "Deterministic remote CPU HardFault (Precise BusFault after 143,345 & 144,412 "
-            "cycles on Malformed Secured Frame Classes A & B) + accepts malformed routing "
-            "headers, mutates security state & delivers to app (144,127 cycles)"
+            "Legacy firmware fails to validate truncated or out-of-bounds NWK/APS headers "
+            "before frame processing"
         ),
         "zerostack_crashes": 0,
         "zerostack_rejection_cycles_range": "320 - 6,631",
@@ -212,7 +209,7 @@ PART2_RESILIENCE_BENCHMARKS: dict[str, dict[str, BenchmarkMetricValue]] = {
         "post_brownout_flash_write_reduction_x": 749.3,
     },
     "hostile_uart_serial_framing_abuse_6_scenarios": {
-        "baud_rate_tested": 115200,
+        "uart_framing": "DMA-driven TI ZNP / MT serial transport",
         "scenarios_tested": 6,
         "legacy_300x_sof_blackout_s": 8.84,
         "legacy_consecutive_lost_pings": 44,
@@ -234,7 +231,6 @@ PART2_RESILIENCE_BENCHMARKS: dict[str, dict[str, BenchmarkMetricValue]] = {
         "zerostack_uart_rtt_ms": 4.3,
         "zerostack_total_s": 0.22,
         "speedup_x": 7.7,
-        "bounded_timer_refusal_limit": 194,
         "bounded_timer_refusal_status": "NO_TIMER_AVAIL",
         "zero_byte_free_heap_pings_answered": "5 / 5",
         "zero_byte_free_heap_delta_bytes": 0,
@@ -252,9 +248,7 @@ PART2_RESILIENCE_BENCHMARKS: dict[str, dict[str, BenchmarkMetricValue]] = {
         "total_cpu_reduction_x": 19.9,
     },
     "post_outage_64_unique_broadcast_flood_d150": {
-        "legacy_btt_admitted": 30,
         "legacy_admitted_cycles": 154705,
-        "zerostack_btt_admitted": 40,
         "zerostack_admitted_cycles": 17699,
         "zerostack_admitted_us": 369.0,
         "btt_capacity_increase_pct": 33.3,
@@ -279,9 +273,8 @@ def _build_platform_benchmark(
     cpu_core: str,
     flash_kb: int,
     sram_kb: int,
-    hardware_rts_cts: bool,
-    rts_cts_pins: str,
-    max_source_routes: int,
+    u_variants_supported: bool,
+    capacity_highlights: str,
 ) -> PlatformBenchmarkSummary:
     return {
         "platform": platform,
@@ -290,27 +283,19 @@ def _build_platform_benchmark(
         "release_version": ZEROSTACK_FIRMWARE_VERSION,
         "release_status": (
             f"SMLIGHT ZeroStack {ZEROSTACK_RELEASE_NAME} — Zigbee 3.0 / PRO R23 Coordinator & "
-            "Router firmware for SMLIGHT TI SimpleLink F2 adapters"
+            "Router firmware for SMLIGHT TI SimpleLink F2 adapters (incl. U variants)"
         ),
         "marketing_url": ZEROSTACK_MARKETING_URL,
         "cpu_core": cpu_core,
         "flash_kb": flash_kb,
         "sram_kb": sram_kb,
-        "hardware_rts_cts": hardware_rts_cts,
-        "rts_cts_pins": rts_cts_pins,
-        "uart_transport": (
-            "DMA-driven UART with live auto-baud detection (115200 / 460800 / 1000000 baud)"
-        ),
-        "supported_baud_rates": [115200, 460800, 1000000],
+        "u_variants_supported": u_variants_supported,
+        "capacity_highlights": capacity_highlights,
+        "uart_transport": "TI ZNP / MT DMA-driven serial host transport (8N1)",
         "firmware_roles": [
             "Coordinator (TI ZNP / MT)",
             "Router (Zigbee 3.0 / PRO R23)",
         ],
-        "hw_srcmatch_short_slots": 32,
-        "hw_srcmatch_ext_slots": 32,
-        "indirect_queue_pool_cap_pct": 50,
-        "max_indirect_frames_per_child": 2,
-        "max_source_routes": max_source_routes,
         "tclk_miss_speedup_x": 4559.0,
         "tclk_oldest_hit_speedup_x": 1914.8,
         "nwk_encrypt_speedup_x": 134.4,
@@ -336,7 +321,6 @@ def _build_platform_benchmark(
         "uart_abuse_lost_pings": 0,
         "join_flood_50_devices_speedup_x": 7.7,
         "broadcast_echo_storm_speedup_x": 20.3,
-        "btt_capacity_slots": 40,
         "heap_fragmentation_pct": 0.0,
         "heap_delta_bytes": 0,
         "memory_allocator": (
@@ -344,8 +328,8 @@ def _build_platform_benchmark(
             "heap-independent timer subsystem (1,448 cycles, 6.9x faster)"
         ),
         "radio_state_reconciliation": (
-            "Self-healing Sub-MAC receiver and synthesizer state recovery, indirect queue quota "
-            "isolation (50% pool cap, max 2 frames/child), and 0 crashes across 3,255 MAC vectors"
+            "IEEE 802.15.4 MAC receiver state validation, bounded indirect frame queuing, "
+            "and 0 crashes across 3,255 MAC test vectors"
         ),
         "zeroStackDiagUrl": (
             f"{ZEROSTACK_DIAGNOSTICS_BASE}/mac-no-ack-0xe9-sleepy-aqara-tuya-child-drops.md"
@@ -353,86 +337,116 @@ def _build_platform_benchmark(
     }
 
 
+_CC2652P_HIGHLIGHTS = (
+    "200-node table capacity, high-density source routes, indirect queue quota isolation"
+)
+_CC2652P7_HIGHLIGHTS = (
+    "300-node table & TCLK capacity, high-density source routes, indirect queue isolation"
+)
+_CC2674P10_HIGHLIGHTS = (
+    "Max-scale node & TCLK capacity, expanded concentrator source routing & indirect buffer pools"
+)
+
+
 BENCHMARK_DATA: dict[str, PlatformBenchmarkSummary] = {
     "SLZB-06": _build_platform_benchmark(
         platform="SLZB-06",
         soc="TI CC2652P (SimpleLink F2)",
-        cpu_core="ARM Cortex-M4F @ 48.0 MHz + Cortex-M0 RF Core",
+        cpu_core="ARM Cortex-M4F @ 48.0 MHz + Cortex-M0 CPE",
         flash_kb=352,
         sram_kb=88,
-        hardware_rts_cts=False,
-        rts_cts_pins="None (no hardware RTS/CTS)",
-        max_source_routes=200,
+        u_variants_supported=True,
+        capacity_highlights=_CC2652P_HIGHLIGHTS,
     ),
-    "SLZB-06U": _build_platform_benchmark(
-        platform="SLZB-06U",
+    "SLZB-MR2": _build_platform_benchmark(
+        platform="SLZB-MR2",
         soc="TI CC2652P (SimpleLink F2)",
-        cpu_core="ARM Cortex-M4F @ 48.0 MHz + Cortex-M0 RF Core",
+        cpu_core="ARM Cortex-M4F @ 48.0 MHz + Cortex-M0 CPE",
         flash_kb=352,
         sram_kb=88,
-        hardware_rts_cts=True,
-        rts_cts_pins="DIO10 (RTS) / DIO11 (CTS)",
-        max_source_routes=200,
+        u_variants_supported=True,
+        capacity_highlights=_CC2652P_HIGHLIGHTS,
     ),
     "SLZB-06P7": _build_platform_benchmark(
         platform="SLZB-06P7",
         soc="TI CC2652P7 / CC1352P7 (SimpleLink F2)",
-        cpu_core="ARM Cortex-M4F @ 48.0 MHz + Cortex-M0 RF Core",
+        cpu_core="ARM Cortex-M4F @ 48.0 MHz + Cortex-M0 CPE",
         flash_kb=704,
         sram_kb=144,
-        hardware_rts_cts=True,
-        rts_cts_pins="DIO10 (RTS) / DIO11 (CTS)",
-        max_source_routes=250,
-    ),
-    "SLZB-06P7U": _build_platform_benchmark(
-        platform="SLZB-06P7U",
-        soc="TI CC2652P7 / CC1352P7 (SimpleLink F2)",
-        cpu_core="ARM Cortex-M4F @ 48.0 MHz + Cortex-M0 RF Core",
-        flash_kb=704,
-        sram_kb=144,
-        hardware_rts_cts=True,
-        rts_cts_pins="DIO10 (RTS) / DIO11 (CTS)",
-        max_source_routes=250,
-    ),
-    "SLZB-06P7V1": _build_platform_benchmark(
-        platform="SLZB-06P7V1",
-        soc="TI CC2652P7 / CC1352P7 (SimpleLink F2)",
-        cpu_core="ARM Cortex-M4F @ 48.0 MHz + Cortex-M0 RF Core",
-        flash_kb=704,
-        sram_kb=144,
-        hardware_rts_cts=False,
-        rts_cts_pins="None (no hardware RTS/CTS on v1 PCB)",
-        max_source_routes=250,
+        u_variants_supported=True,
+        capacity_highlights=_CC2652P7_HIGHLIGHTS,
     ),
     "SLZB-07P7": _build_platform_benchmark(
         platform="SLZB-07P7",
-        soc="TI CC2652P7 (SimpleLink F2)",
-        cpu_core="ARM Cortex-M4F @ 48.0 MHz + Cortex-M0 RF Core",
+        soc="TI CC2652P7 / CC1352P7 (SimpleLink F2)",
+        cpu_core="ARM Cortex-M4F @ 48.0 MHz + Cortex-M0 CPE",
         flash_kb=704,
         sram_kb=144,
-        hardware_rts_cts=False,
-        rts_cts_pins="None (USB dongle without hardware RTS/CTS)",
-        max_source_routes=250,
+        u_variants_supported=True,
+        capacity_highlights=_CC2652P7_HIGHLIGHTS,
+    ),
+    "SLZB-MR1": _build_platform_benchmark(
+        platform="SLZB-MR1",
+        soc="TI CC2652P7 / CC1352P7 (SimpleLink F2)",
+        cpu_core="ARM Cortex-M4F @ 48.0 MHz + Cortex-M0 CPE",
+        flash_kb=704,
+        sram_kb=144,
+        u_variants_supported=True,
+        capacity_highlights=_CC2652P7_HIGHLIGHTS,
     ),
     "SLZB-06P10": _build_platform_benchmark(
         platform="SLZB-06P10",
         soc="TI CC2674P10 (SimpleLink F2)",
-        cpu_core="ARM Cortex-M33 @ 48.0 MHz + Cortex-M0 RF Core",
+        cpu_core="ARM Cortex-M33 @ 48.0 MHz + Cortex-M0 CPE",
         flash_kb=1024,
         sram_kb=256,
-        hardware_rts_cts=True,
-        rts_cts_pins="DIO10 (RTS) / DIO11 (CTS)",
-        max_source_routes=300,
+        u_variants_supported=True,
+        capacity_highlights=_CC2674P10_HIGHLIGHTS,
     ),
     "SLZB-07P10": _build_platform_benchmark(
         platform="SLZB-07P10",
         soc="TI CC2674P10 (SimpleLink F2)",
-        cpu_core="ARM Cortex-M33 @ 48.0 MHz + Cortex-M0 RF Core",
+        cpu_core="ARM Cortex-M33 @ 48.0 MHz + Cortex-M0 CPE",
         flash_kb=1024,
         sram_kb=256,
-        hardware_rts_cts=False,
-        rts_cts_pins="None (USB dongle without hardware RTS/CTS)",
-        max_source_routes=300,
+        u_variants_supported=True,
+        capacity_highlights=_CC2674P10_HIGHLIGHTS,
+    ),
+    "SLZB-MR3": _build_platform_benchmark(
+        platform="SLZB-MR3",
+        soc="TI CC2674P10 (SimpleLink F2)",
+        cpu_core="ARM Cortex-M33 @ 48.0 MHz + Cortex-M0 CPE",
+        flash_kb=1024,
+        sram_kb=256,
+        u_variants_supported=True,
+        capacity_highlights=_CC2674P10_HIGHLIGHTS,
+    ),
+    "SLZB-MR4": _build_platform_benchmark(
+        platform="SLZB-MR4",
+        soc="TI CC2674P10 (SimpleLink F2)",
+        cpu_core="ARM Cortex-M33 @ 48.0 MHz + Cortex-M0 CPE",
+        flash_kb=1024,
+        sram_kb=256,
+        u_variants_supported=True,
+        capacity_highlights=_CC2674P10_HIGHLIGHTS,
+    ),
+    "SLZB-MRW10": _build_platform_benchmark(
+        platform="SLZB-MRW10",
+        soc="TI CC2674P10 (SimpleLink F2)",
+        cpu_core="ARM Cortex-M33 @ 48.0 MHz + Cortex-M0 CPE",
+        flash_kb=1024,
+        sram_kb=256,
+        u_variants_supported=True,
+        capacity_highlights=_CC2674P10_HIGHLIGHTS,
+    ),
+    "SLZB-Ultima": _build_platform_benchmark(
+        platform="SLZB-Ultima",
+        soc="TI CC2674P10 (SimpleLink F2)",
+        cpu_core="ARM Cortex-M33 @ 48.0 MHz + Cortex-M0 CPE",
+        flash_kb=1024,
+        sram_kb=256,
+        u_variants_supported=True,
+        capacity_highlights=_CC2674P10_HIGHLIGHTS,
     ),
 }
 
@@ -442,16 +456,22 @@ def normalize_platform_key(platform: str) -> PlatformKeyLiteral | Literal["ALL"]
     compact = norm.replace("-", "")
     if norm in ("ALL", "*"):
         return "ALL"
-    if "06P7U" in compact:
-        return "SLZB-06P7U"
-    if "06P7V1" in compact:
-        return "SLZB-06P7V1"
+    if "ULTIMA" in compact:
+        return "SLZB-Ultima"
+    if "MRW10" in compact:
+        return "SLZB-MRW10"
+    if "MR4" in compact:
+        return "SLZB-MR4"
+    if "MR3" in compact:
+        return "SLZB-MR3"
+    if "MR2" in compact:
+        return "SLZB-MR2"
+    if "MR1" in compact:
+        return "SLZB-MR1"
     if "07P7" in compact:
         return "SLZB-07P7"
     if "07P10" in compact:
         return "SLZB-07P10"
-    if "06U" in compact:
-        return "SLZB-06U"
     if "06P10" in compact or "2674" in compact or compact == "P10":
         return "SLZB-06P10"
     if "06P7" in compact or "1352" in compact or "2652P7" in compact or compact == "P7":
@@ -459,9 +479,9 @@ def normalize_platform_key(platform: str) -> PlatformKeyLiteral | Literal["ALL"]
     if "SLZB06" in compact or "2652" in compact:
         return "SLZB-06"
     raise ValueError(
-        f"Unknown platform '{platform}'. Supported platforms: SLZB-06, SLZB-06U (CC2652P), "
-        "SLZB-06P7, SLZB-06P7U, SLZB-06P7v1, SLZB-07P7 (CC2652P7 / CC1352P7), "
-        "SLZB-06P10, SLZB-07P10 (CC2674P10), or 'all'."
+        f"Unknown platform '{platform}'. Supported platforms (incl. U variants): "
+        "CC2652P (SLZB-06, SLZB-MR2), CC2652P7/CC1352P7 (SLZB-06P7, SLZB-07P7, SLZB-MR1), "
+        "CC2674P10 (SLZB-06P10, SLZB-07P10, SLZB-MR3, SLZB-MR4, SLZB-MRW10, SLZB-Ultima), or 'all'."
     )
 
 
@@ -482,6 +502,8 @@ def get_zerostack_benchmarks_impl(platform: str) -> BenchmarkResult:
             ),
             "interactive_web_analyzer_url": ZEROSTACK_WEB_ANALYZER_URL,
             "zerostack_repository": ZEROSTACK_REPO_URL,
+            "whitepaper_md_url": ZEROSTACK_WHITEPAPER_MD_URL,
+            "whitepaper_pdf_url": ZEROSTACK_WHITEPAPER_PDF_URL,
         }
         return all_result
 
@@ -496,6 +518,8 @@ def get_zerostack_benchmarks_impl(platform: str) -> BenchmarkResult:
         "marketing_url": ZEROSTACK_MARKETING_URL,
         "interactive_web_analyzer_url": ZEROSTACK_WEB_ANALYZER_URL,
         "zerostack_repository": ZEROSTACK_REPO_URL,
+        "whitepaper_md_url": ZEROSTACK_WHITEPAPER_MD_URL,
+        "whitepaper_pdf_url": ZEROSTACK_WHITEPAPER_PDF_URL,
     }
     return single_result
 
@@ -506,22 +530,19 @@ def build_supported_models_manifest() -> SupportedModelsManifest:
         "release": ZEROSTACK_RELEASE_NAME,
         "version": ZEROSTACK_FIRMWARE_VERSION,
         "marketing_url": ZEROSTACK_MARKETING_URL,
+        "whitepaper_md_url": ZEROSTACK_WHITEPAPER_MD_URL,
+        "whitepaper_pdf_url": ZEROSTACK_WHITEPAPER_PDF_URL,
         "firmware_roles": [
             "Coordinator (TI ZNP / MT)",
             "Router (Zigbee 3.0 / PRO R23)",
         ],
-        "supported_baud_rates": [115200, 460800, 1000000],
         "models": {
             key: {
                 "soc": val["soc"],
                 "sram_kb": val["sram_kb"],
                 "flash_kb": val["flash_kb"],
-                "hardware_rts_cts": val["hardware_rts_cts"],
-                "rts_cts_pins": val["rts_cts_pins"],
-                "max_source_routes": val["max_source_routes"],
-                "hw_srcmatch_short_slots": val["hw_srcmatch_short_slots"],
-                "indirect_queue_pool_cap_pct": val["indirect_queue_pool_cap_pct"],
-                "max_indirect_frames_per_child": val["max_indirect_frames_per_child"],
+                "u_variants_supported": val["u_variants_supported"],
+                "capacity_highlights": val["capacity_highlights"],
             }
             for key, val in BENCHMARK_DATA.items()
         },

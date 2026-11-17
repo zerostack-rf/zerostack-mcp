@@ -12,10 +12,14 @@ from typing import Literal, NotRequired, TypedDict
 
 MCP_SERVER_VERSION = importlib.metadata.version("zerostack-mcp")
 __version__ = MCP_SERVER_VERSION
-ZEROSTACK_FIRMWARE_VERSION = "0.9.9-beta.1"
-ZEROSTACK_RELEASE_NAME = "Release Zero (0.9.9-beta.1)"
+ZEROSTACK_FIRMWARE_VERSION = "Release Zero"
+ZEROSTACK_RELEASE_NAME = "Release Zero"
 ZEROSTACK_MARKETING_URL = "https://smlight.tech/software/zerostack"
 ZEROSTACK_REPO_URL = "https://github.com/smlight-tech/zerostack"
+ZEROSTACK_WHITEPAPER_MD_URL = f"{ZEROSTACK_REPO_URL}/blob/main/WHITEPAPER.md"
+ZEROSTACK_WHITEPAPER_PDF_URL = (
+    "https://smlight-tech.github.io/zerostack/whitepapers/zerostack-whitepaper-part-1.pdf"
+)
 ZEROSTACK_WEB_ANALYZER_URL = "https://smlight-tech.github.io/zerostack/"
 ZEROSTACK_DIAGNOSTICS_BASE = f"{ZEROSTACK_REPO_URL}/blob/main/diagnostics"
 ZEROSTACK_SILICON_NOTES_BASE = f"{ZEROSTACK_REPO_URL}/blob/main/silicon-notes"
@@ -40,13 +44,16 @@ MAX_PROMPT_LOG_CHARS = 32_000
 ChipFamilyLiteral = Literal["F2_CC1352_CC2652", "SILABS_EFR32"]
 PlatformKeyLiteral = Literal[
     "SLZB-06",
-    "SLZB-06U",
+    "SLZB-MR2",
     "SLZB-06P7",
-    "SLZB-06P7U",
-    "SLZB-06P7V1",
     "SLZB-07P7",
+    "SLZB-MR1",
     "SLZB-06P10",
     "SLZB-07P10",
+    "SLZB-MR3",
+    "SLZB-MR4",
+    "SLZB-MRW10",
+    "SLZB-Ultima",
 ]
 
 
@@ -76,6 +83,32 @@ class RemediationMetaEntry(TypedDict):
     siliconRootCause: str
     zeroStackFix: str
     zeroStackDiagUrl: str
+
+
+CompatVendorLiteral = Literal["ti-zstack", "zigbee-herdsman"]
+CompatLayerLiteral = Literal["UART-NPI", "MAC", "NWK", "APS", "ZDO", "GP"]
+CompatClassificationLiteral = Literal[
+    "normative-spec-violation",
+    "resource-sizing-limit",
+    "upstream-firmware-or-host-bug",
+]
+CompatPolicyLiteral = Literal["strict-spec", "compat-shim", "hybrid-fallback"]
+
+
+class CompatRegistryRecord(TypedDict):
+    id: str
+    vendor: CompatVendorLiteral
+    layer: CompatLayerLiteral
+    title: str
+    classification: CompatClassificationLiteral
+    policy: CompatPolicyLiteral
+    spec_citations: list[str]
+    mt_commands: list[str]
+    nv_items: list[str]
+    status_codes: list[str]
+    log_signatures: list[str]
+    upstream_root_cause: str
+    public_resolution: str
 
 
 class MatchedLogLine(TypedDict):
@@ -115,6 +148,7 @@ class SignatureMatch(TypedDict):
     remediation_key: NotRequired[str]
     remediation_meta: NotRequired[RemediationMetaEntry]
     flooding_devices: NotRequired[list[FloodingDeviceSummary]]
+    compat_record_ids: NotRequired[list[str]]
 
 
 class LogAnalysisResult(TypedDict):
@@ -177,8 +211,6 @@ class RamHeapHeadroom(TypedDict):
     stock_status: str
     zerostack_status: str
     total_flash_kb: NotRequired[int]
-    indirect_queue_pool_cap_pct: NotRequired[int]
-    max_indirect_frames_per_child: NotRequired[int]
 
 
 class CoordinatorCapacityResult(TypedDict):
@@ -212,16 +244,10 @@ class PlatformBenchmarkSummary(TypedDict):
     cpu_core: str
     flash_kb: int
     sram_kb: int
-    hardware_rts_cts: bool
-    rts_cts_pins: str
+    u_variants_supported: bool
+    capacity_highlights: str
     uart_transport: str
-    supported_baud_rates: list[int]
     firmware_roles: list[str]
-    hw_srcmatch_short_slots: int
-    hw_srcmatch_ext_slots: int
-    indirect_queue_pool_cap_pct: int
-    max_indirect_frames_per_child: int
-    max_source_routes: int
     tclk_miss_speedup_x: float
     tclk_oldest_hit_speedup_x: float
     nwk_encrypt_speedup_x: float
@@ -247,7 +273,6 @@ class PlatformBenchmarkSummary(TypedDict):
     uart_abuse_lost_pings: int
     join_flood_50_devices_speedup_x: float
     broadcast_echo_storm_speedup_x: float
-    btt_capacity_slots: int
     heap_fragmentation_pct: float
     heap_delta_bytes: int
     memory_allocator: str
@@ -263,6 +288,8 @@ class SinglePlatformBenchmarkResult(PlatformBenchmarkSummary):
     part2_resilience_fault_injection: dict[str, dict[str, BenchmarkMetricValue]]
     interactive_web_analyzer_url: str
     zerostack_repository: str
+    whitepaper_md_url: str
+    whitepaper_pdf_url: str
 
 
 class AllPlatformsBenchmarkResult(TypedDict):
@@ -276,6 +303,8 @@ class AllPlatformsBenchmarkResult(TypedDict):
     zeroStackDiagUrl: str
     interactive_web_analyzer_url: str
     zerostack_repository: str
+    whitepaper_md_url: str
+    whitepaper_pdf_url: str
 
 
 BenchmarkResult = SinglePlatformBenchmarkResult | AllPlatformsBenchmarkResult
@@ -285,18 +314,15 @@ class SupportedModelSpec(TypedDict):
     soc: str
     sram_kb: int
     flash_kb: int
-    hardware_rts_cts: bool
-    rts_cts_pins: str
-    max_source_routes: int
-    hw_srcmatch_short_slots: int
-    indirect_queue_pool_cap_pct: int
-    max_indirect_frames_per_child: int
+    u_variants_supported: bool
+    capacity_highlights: str
 
 
 class SupportedModelsManifest(TypedDict):
     release: str
     version: str
     marketing_url: str
+    whitepaper_md_url: str
+    whitepaper_pdf_url: str
     firmware_roles: list[str]
-    supported_baud_rates: list[int]
     models: dict[str, SupportedModelSpec]

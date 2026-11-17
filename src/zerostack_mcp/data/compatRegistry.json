@@ -1,0 +1,1881 @@
+{
+  "schemaVersion": "1.0.0",
+  "recordCount": 69,
+  "records": [
+    {
+      "id": "TI-AF-001",
+      "vendor": "ti-zstack",
+      "layer": "APS",
+      "title": "MT_AF_DATA_REQUEST (0x24 0x01) forces APS fragmentation and ACK when options=0x00",
+      "classification": "normative-spec-violation",
+      "policy": "strict-spec",
+      "spec_citations": [
+        "Zigbee PRO R22/R23 §2.2.4.1.1.1 (Table 2-2) & §2.2.8.4.5 (Table 2-22)",
+        "TI SWRA198 §3.2.1.1"
+      ],
+      "mt_commands": [
+        "0x24 0x01"
+      ],
+      "nv_items": [],
+      "status_codes": [
+        "0x00",
+        "0x02"
+      ],
+      "log_signatures": [
+        "SREQ: AF - dataRequest - {\"clusterid\":25,\"options\":0,\"len\":81}",
+        "ImageBlockResponse OTA transfer stalls on unacknowledged payload"
+      ],
+      "upstream_root_cause": "Legacy coordinator firmware promotes unacknowledged MT_AF_DATA_REQUEST (0x24 0x01) payloads to APS fragmentation and forces APS_ACK even when the host sets options=0x00, stalling unacknowledged ZCL OTA ImageBlockResponse transfers.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by honoring the host TxOptions bitmask at the MT_AF_DATA_REQUEST (0x24 0x01) boundary and transmitting unacknowledged payloads as single IEEE 802.15.4 frames up to the physical PSDU limit."
+    },
+    {
+      "id": "TI-AF-002",
+      "vendor": "ti-zstack",
+      "layer": "APS",
+      "title": "MT_AF_DATA_REQUEST_SRC_RTG (0x24 0x03) omits source-route header overhead and returns 0x10",
+      "classification": "upstream-firmware-or-host-bug",
+      "policy": "strict-spec",
+      "spec_citations": [
+        "Zigbee PRO R22/R23 §2.2.8.4.5, §3.3.1.8, §3.6.4.3",
+        "TI SWRA198 §3.2.1.3"
+      ],
+      "mt_commands": [
+        "0x24 0x03"
+      ],
+      "nv_items": [],
+      "status_codes": [
+        "0x10"
+      ],
+      "log_signatures": [
+        "SREQ '--> AF - dataRequestSrcRtg' failed with status '(0x10: MEM_ERROR)'",
+        "SRSP: AF - dataRequestSrcRtg - {\"status\":16}"
+      ],
+      "upstream_root_cause": "Legacy coordinator firmware does not account for the NWK Source Route Subframe overhead when validating MT_AF_DATA_REQUEST_SRC_RTG (0x24 0x03) payload sizes and does not support APS fragmentation on source-routed requests, failing with status 0x10.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by accounting for NWK Source Route Subframe overhead and supporting standard Zigbee PRO R23 APS fragmentation on MT_AF_DATA_REQUEST_SRC_RTG (0x24 0x03)."
+    },
+    {
+      "id": "TI-AF-003",
+      "vendor": "ti-zstack",
+      "layer": "APS",
+      "title": "Extended-address AF_DATA_REQUEST_EXT (DstAddrMode=3) to unjoined node broadcasts frame",
+      "classification": "normative-spec-violation",
+      "policy": "strict-spec",
+      "spec_citations": [
+        "Zigbee PRO R22/R23 §2.2.4.1.1 (APSDE-DATA.request), §3.6.1.3 (Special Network Addresses 0xFFF8–0xFFFF)"
+      ],
+      "mt_commands": [
+        "0x24 0x02"
+      ],
+      "nv_items": [
+        "0x0001"
+      ],
+      "status_codes": [
+        "0x00",
+        "0xA3",
+        "0xC2"
+      ],
+      "log_signatures": [
+        "AF_DATA_REQUEST_EXT (DstAddrMode=3) to unaddressed IEEE entry emits broadcast",
+        "SRSP: AF - dataRequestExt - {\"status\":0} for unjoined IEEE entry"
+      ],
+      "upstream_root_cause": "When an address-manager entry has not yet resolved a valid 16-bit short address, legacy coordinator firmware resolves DstAddrMode=3 (64-bit IEEE mode) to the broadcast address and transmits the unicast frame as a mesh-wide broadcast.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by rejecting unicast AF_DATA_REQUEST and AF_DATA_REQUEST_EXT calls targeting unresolved IEEE entries with standard MT error status codes instead of broadcasting."
+    },
+    {
+      "id": "TI-APS-001",
+      "vendor": "ti-zstack",
+      "layer": "APS",
+      "title": "Default coordinator APS binding, group, and link-key table exhaustion (0x89 / 0xAE / 0xB2)",
+      "classification": "resource-sizing-limit",
+      "policy": "strict-spec",
+      "spec_citations": [
+        "Zigbee PRO R22/R23 §2.2.8.2 (Binding Table), §2.2.8.3 (Group Table), §4.4.12 (Table 4-35 & Table 4-36: apsDeviceKeyPairSet)"
+      ],
+      "mt_commands": [
+        "0x25 0x21",
+        "0x21 0x08",
+        "0x21 0x09",
+        "0x21 0x1C",
+        "0x21 0x1D",
+        "0x21 0x33",
+        "0x21 0x34"
+      ],
+      "nv_items": [
+        "0x0001",
+        "0x0004",
+        "0x0006",
+        "0x0041",
+        "0x0042"
+      ],
+      "status_codes": [
+        "0x89",
+        "0xAE",
+        "0xB2"
+      ],
+      "log_signatures": [
+        "Data request failed with error: 'APS_TABLE_FULL' (0xb2)",
+        "Bind request failed with status 0x89 (TABLE_FULL) or 0xAE (APS_NO_BOUND_DEVICE)"
+      ],
+      "upstream_root_cause": "Default coordinator firmware builds provision minimal APS binding, multicast group, and link-key table capacities, causing coordinator-bound reporting, Green Power group 0x0B84 membership, and device onboarding to fail with 0x89, 0xAE, or 0xB2.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by provisioning expanded coordinator APS binding, group, and link-key tables and maintaining Green Power Proxy group 0x0B84 on Endpoint 242."
+    },
+    {
+      "id": "TI-APS-002",
+      "vendor": "ti-zstack",
+      "layer": "APS",
+      "title": "APS retransmission fails to re-seal retry with a fresh 32-bit Aux FrameCounter",
+      "classification": "normative-spec-violation",
+      "policy": "strict-spec",
+      "spec_citations": [
+        "Zigbee PRO R22/R23 §2.2.8.4.4 (Retransmissions), §4.4.1.1 (APS Outgoing Frame Counter)"
+      ],
+      "mt_commands": [
+        "0x24 0x01"
+      ],
+      "nv_items": [
+        "0x0004",
+        "0x0006"
+      ],
+      "status_codes": [
+        "0xA7"
+      ],
+      "log_signatures": [
+        "APS-encrypted command retry dropped by remote anti-replay check (status 0xA7 APS_NO_ACK)",
+        "Trust Center Verify-Key or fragmented APS block retry fails after lost ACK"
+      ],
+      "upstream_root_cause": "Legacy coordinator firmware retransmits APS-secured retries using the original cached ciphertext and 32-bit APS Auxiliary Security FrameCounter, which strict Zigbee PRO R23 peers reject as a duplicate security counter if the first attempt was processed.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by sealing every APS-secured retransmission with a freshly incremented 32-bit APS Auxiliary Security FrameCounter per Zigbee PRO R23 §2.2.8.4.4 and §4.4.1.1."
+    },
+    {
+      "id": "TI-APS-003",
+      "vendor": "ti-zstack",
+      "layer": "APS",
+      "title": "APS duplicate rejection drops duplicate unicast frames before emitting repair APS ACK",
+      "classification": "normative-spec-violation",
+      "policy": "strict-spec",
+      "spec_citations": [
+        "Zigbee PRO R22/R23 §2.2.8.4.6 (Reception and Rejection of Duplicate Frames)"
+      ],
+      "mt_commands": [
+        "0x24 0x01",
+        "0x44 0x80"
+      ],
+      "nv_items": [],
+      "status_codes": [
+        "0xA7"
+      ],
+      "log_signatures": [
+        "Data request failed with error: 'APS_NO_ACK' (0xa7) after lost APS ACK",
+        "Duplicate fragmented block or Verify-Key dropped without re-sending APS ACK"
+      ],
+      "upstream_root_cause": "Legacy coordinator firmware discards duplicate incoming unicast APS frames before generating a repair APS acknowledgment, causing the sender to exhaust retries and fail with status 0xA7 (APS_NO_ACK) whenever an over-the-air APS ACK is lost.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by emitting a repair APS acknowledgment on duplicate unicast APS frames while suppressing duplicate application delivery per Zigbee PRO R23 §2.2.8.4.6."
+    },
+    {
+      "id": "TI-APS-004",
+      "vendor": "ti-zstack",
+      "layer": "APS",
+      "title": "Outer-APS-secured APS Tunnel (0x0E) command wrapping inner Transport-Key (Ruling 7.13)",
+      "classification": "normative-spec-violation",
+      "policy": "compat-shim",
+      "spec_citations": [
+        "Zigbee PRO R22/R23 §4.4.11.6 (APS Tunnel Command), §4.4.1.3 (Table 4-6) & §4.6.3.7.2 (Ruling 7.13)"
+      ],
+      "mt_commands": [],
+      "nv_items": [],
+      "status_codes": [
+        "0xA7",
+        "0xAD"
+      ],
+      "log_signatures": [
+        "Router-assisted device join fails during APS Tunnel (0x0E) Transport-Key delivery",
+        "Outer-APS-secured APS Tunnel (0x0E) command rejected by parent router"
+      ],
+      "upstream_root_cause": "Coordinator and router stacks differ on whether APS Tunnel (0x0E) commands carrying an inner Transport-Key to a parent router apply outer APS link-key encryption in addition to inner command security (Zigbee PRO R23 Ruling 7.13).",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by emitting standard Zigbee PRO R23 §4.4.11.6 APS Tunnel (0x0E) commands and accepting both outer-APS-unsecured and outer-APS-secured tunnel frames on router ingress."
+    },
+    {
+      "id": "TI-GP-001",
+      "vendor": "ti-zstack",
+      "layer": "GP",
+      "title": "Green Power Proxy Basic (ZCL 0x0021 on Endpoint 242 / 0xF2) delivery over MT_AF_INCOMING_MSG",
+      "classification": "normative-spec-violation",
+      "policy": "strict-spec",
+      "spec_citations": [
+        "Zigbee Green Power Basic Specification v1.1.2 (14-0563-19) §A.3.3–A.3.5 (Endpoint 0xF2 Cluster 0x0021 GP Notification / Commissioning Notification & GPD Alias)"
+      ],
+      "mt_commands": [
+        "0x24 0x00",
+        "0x44 0x81",
+        "0x27 0x4B"
+      ],
+      "nv_items": [
+        "0x0041"
+      ],
+      "status_codes": [],
+      "log_signatures": [
+        "Green Power frame on Endpoint 242 (0xF2) Cluster 0x0021 not delivered via AF_INCOMING_MSG",
+        "Friends of Hue / PTM 215Z Green Power switch commissioning or press ignored"
+      ],
+      "upstream_root_cause": "Legacy coordinator firmware consumes ZCL Cluster 0x0021 (Green Power) frames inside internal stub handlers instead of forwarding groupcast and unicast GP notifications on Endpoint 242 (0xF2) to the host via MT_AF_INCOMING_MSG (0x44 0x81).",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by registering Endpoint 242 (0xF2) and group 0x0B84 and forwarding ZCL 0x0021 Green Power frames to the host via MT_AF_INCOMING_MSG (0x44 0x81)."
+    },
+    {
+      "id": "TI-MAC-001",
+      "vendor": "ti-zstack",
+      "layer": "MAC",
+      "title": "Unresponsive sleepy end devices exhaust shared indirect transmit buffers (0x10 / 0x11 / 0xF1)",
+      "classification": "resource-sizing-limit",
+      "policy": "strict-spec",
+      "spec_citations": [
+        "IEEE 802.15.4-2020 §6.7.3 (Indirect transmission)",
+        "Zigbee PRO R22 §3.6.5 / R23 §3.6.6 (End Device Buffering)"
+      ],
+      "mt_commands": [
+        "0x24 0x01",
+        "0x44 0x80"
+      ],
+      "nv_items": [],
+      "status_codes": [
+        "0x10",
+        "0x11",
+        "0xF0",
+        "0xF1"
+      ],
+      "log_signatures": [
+        "Data request failed with error: 'MAC_TRANSACTION_OVERFLOW' (0xf1)",
+        "Data request failed with error: 'BUFFER_FULL' (0x11) or 'MEM_ERROR' (0x10)"
+      ],
+      "upstream_root_cause": "Legacy coordinator firmware shares a single unpartitioned transmit buffer pool across all active router unicasts and indirect sleepy-device queues, allowing offline sleepy end devices to exhaust buffers and fail router traffic with 0x10, 0x11, or 0xF1.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by enforcing per-child and global indirect queue isolation so unresponsive sleepy end devices cannot starve active mesh router traffic."
+    },
+    {
+      "id": "TI-MAC-002",
+      "vendor": "ti-zstack",
+      "layer": "MAC",
+      "title": "Immediate indirect packet purge on a single unacknowledged MAC Data Request (0x04) poll",
+      "classification": "normative-spec-violation",
+      "policy": "strict-spec",
+      "spec_citations": [
+        "IEEE 802.15.4-2020 §6.7.3 (Indirect transmission & macMaxFrameRetries)"
+      ],
+      "mt_commands": [
+        "0x44 0x80"
+      ],
+      "nv_items": [],
+      "status_codes": [
+        "0xE9",
+        "0xF0"
+      ],
+      "log_signatures": [
+        "Sleepy end device loses queued command on single missed MAC ACK during poll",
+        "Data request failed with error: 'MAC_NO_ACK' (0xe9) on sleepy child poll"
+      ],
+      "upstream_root_cause": "When a sleepy child polls via MAC Data Request (0x04) and the coordinator's downlink frame misses its IEEE 802.15.4 MAC ACK on the first attempt, legacy coordinator firmware immediately purges the queued indirect message instead of retaining it.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by retaining queued indirect frames across unacknowledged poll attempts until acknowledged by the sleepy child or the persistence window expires per IEEE 802.15.4-2020 §6.7.3."
+    },
+    {
+      "id": "TI-MAC-003",
+      "vendor": "ti-zstack",
+      "layer": "MAC",
+      "title": "IEEE 802.15.4-2020 §6.3.5 MAC Orphan Notification (0x06) ignored after coordinator backup restore",
+      "classification": "normative-spec-violation",
+      "policy": "compat-shim",
+      "spec_citations": [
+        "IEEE 802.15.4-2020 §6.3.5 (Orphan Notification & Coordinator Realignment)",
+        "Zigbee PRO R22 §3.6.1.4.2 / R23 §3.6.1.6"
+      ],
+      "mt_commands": [
+        "0x21 0x09",
+        "0x21 0x1D",
+        "0x21 0x34"
+      ],
+      "nv_items": [
+        "0x0001",
+        "0x0003"
+      ],
+      "status_codes": [
+        "0xCD",
+        "0xE9",
+        "0xF0"
+      ],
+      "log_signatures": [
+        "Sleepy Aqara/Tuya/Sonoff end devices drop offline after coordinator backup restore",
+        "MAC Orphan Notification (0x06) ignored after restoreBackup()"
+      ],
+      "upstream_root_cause": "When a host backup restore populates ZCD_NV_EX_ADDRMGR (0x0001) without writing ZCD_NV_EX_ASSOC_TABLE (0x0003), legacy coordinator firmware fails to recognize restored children and ignores IEEE 802.15.4 MAC Orphan Notifications (0x06).",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by answering IEEE 802.15.4 MAC Orphan Notifications (0x06) from restored children with Coordinator Realignment (0x08) per IEEE 802.15.4-2020 §6.3.5."
+    },
+    {
+      "id": "TI-NPI-001",
+      "vendor": "ti-zstack",
+      "layer": "UART-NPI",
+      "title": "Delayed hardware RTS assertion under back-to-back host UART SREQ write bursts",
+      "classification": "upstream-firmware-or-host-bug",
+      "policy": "strict-spec",
+      "spec_citations": [
+        "TI Z-Stack Monitor and Test (MT) API (SWRA198) §2.1 (UART Hardware Flow Control)"
+      ],
+      "mt_commands": [],
+      "nv_items": [],
+      "status_codes": [],
+      "log_signatures": [
+        "Error: SRSP - SYS - osalNvWriteExt after 6000ms during backup restore",
+        "UART RX buffer overrun under back-to-back SREQ burst with rtscts: true"
+      ],
+      "upstream_root_cause": "Legacy coordinator UART driver firmware does not assert hardware RTS flow control in time during back-to-back host SREQ write bursts when the application task is busy, causing dropped SREQ frames and 6000 ms SRSP timeouts.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by asserting hardware RTS flow control deterministically before serial receive capacity is exhausted."
+    },
+    {
+      "id": "TI-NPI-002",
+      "vendor": "ti-zstack",
+      "layer": "UART-NPI",
+      "title": "Asynchronous AREQ transmitted ahead of synchronous SRSP or SRSP dropped under load",
+      "classification": "upstream-firmware-or-host-bug",
+      "policy": "strict-spec",
+      "spec_citations": [
+        "TI Z-Stack Monitor and Test (MT) API (SWRA198) §2.1 (SREQ/SRSP synchronous handshake)"
+      ],
+      "mt_commands": [
+        "0x24 0x01",
+        "0x25 0x02",
+        "0x21 0x08"
+      ],
+      "nv_items": [],
+      "status_codes": [
+        "0x10"
+      ],
+      "log_signatures": [
+        "Error: SRSP - AF - dataRequest after 6000ms",
+        "AREQ confirmation arrives on UART wire before matching SRSP"
+      ],
+      "upstream_root_cause": "Legacy coordinator firmware can transmit an asynchronous AREQ triggered during SREQ processing ahead of the synchronous SRSP or drop the SRSP under memory pressure, causing a 6000 ms host SREQ timeout.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by guaranteeing synchronous SRSP delivery and always transmitting the matching SRSP on the UART wire before any causal AREQ."
+    },
+    {
+      "id": "TI-NPI-003",
+      "vendor": "ti-zstack",
+      "layer": "UART-NPI",
+      "title": "Coordinator UART transport lockup following serial receive overrun or framing error",
+      "classification": "upstream-firmware-or-host-bug",
+      "policy": "strict-spec",
+      "spec_citations": [
+        "TI Z-Stack Monitor and Test (MT) API (SWRA198) §2.1–2.2 (UART Error Recovery)"
+      ],
+      "mt_commands": [
+        "0x21 0x09",
+        "0x21 0x13"
+      ],
+      "nv_items": [],
+      "status_codes": [],
+      "log_signatures": [
+        "Error: SRSP - SYS - ping after 6000ms after heavy UART burst",
+        "Coordinator UART becomes permanently unresponsive until hardware reset"
+      ],
+      "upstream_root_cause": "Legacy coordinator serial transport firmware halts on a UART receive buffer overrun or framing error instead of clearing the error condition and re-arming reception.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by recovering automatically from UART framing and overrun errors without halting the serial transport."
+    },
+    {
+      "id": "TI-NPI-004",
+      "vendor": "ti-zstack",
+      "layer": "UART-NPI",
+      "title": "MT serial frame parser desynchronization when an aborted frame payload contains 0xFE",
+      "classification": "upstream-firmware-or-host-bug",
+      "policy": "strict-spec",
+      "spec_citations": [
+        "TI Z-Stack Monitor and Test (MT) API (SWRA198) §2.2 (General Frame Format & FCS Resynchronization)"
+      ],
+      "mt_commands": [
+        "0x21 0x01",
+        "0x24 0x01"
+      ],
+      "nv_items": [],
+      "status_codes": [],
+      "log_signatures": [
+        "zh:zstack:unpi:parser: Invalid UNPI checksum / unexpected SOF",
+        "Cascading 6000ms SREQ timeouts after TCP-to-UART bridge reconnect"
+      ],
+      "upstream_root_cause": "When an inbound MT frame is truncated across a serial or TCP bridge reconnect, legacy coordinator frame parsing consumes subsequent bytes up to the stale length field, swallowing the 0xFE start-of-frame header of following valid SREQ commands.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by resynchronizing cleanly on truncated or FCS-invalid MT frames without consuming subsequent valid 0xFE start-of-frame headers."
+    },
+    {
+      "id": "TI-NPI-005",
+      "vendor": "ti-zstack",
+      "layer": "UART-NPI",
+      "title": "MT_SYS_PING (0x21 0x01) startup handshake timeout on host serial port initialization",
+      "classification": "upstream-firmware-or-host-bug",
+      "policy": "strict-spec",
+      "spec_citations": [
+        "TI Z-Stack Monitor and Test (MT) API (SWRA198) §2.1–2.2"
+      ],
+      "mt_commands": [
+        "0x21 0x01",
+        "0x41 0x80"
+      ],
+      "nv_items": [],
+      "status_codes": [],
+      "log_signatures": [
+        "Error: Failed to connect to the adapter (Error: SRSP - SYS - ping after 6000ms)",
+        "SYS_PING startup handshake timeout during host adapter initialization"
+      ],
+      "upstream_root_cause": "During host startup or container restart, serial line transients or unaligned startup bytes can cause legacy coordinator firmware to miss the initial MT_SYS_PING (0x21 0x01) handshake frame.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by deterministically synchronizing the MT serial transport on inbound MT_SYS_PING (0x21 0x01) handshakes."
+    },
+    {
+      "id": "TI-NPI-006",
+      "vendor": "ti-zstack",
+      "layer": "UART-NPI",
+      "title": "MT_SYS_RESET_REQ (0x41 0x00) soft reset timeout waiting for SYS_RESET_IND (0x41 0x80)",
+      "classification": "upstream-firmware-or-host-bug",
+      "policy": "strict-spec",
+      "spec_citations": [
+        "TI Z-Stack Monitor and Test (MT) API (SWRA198) §3.1.2 (MT_SYS_RESET_REQ 0x41 0x00 & MT_SYS_RESET_IND 0x41 0x80)"
+      ],
+      "mt_commands": [
+        "0x41 0x00",
+        "0x41 0x80"
+      ],
+      "nv_items": [],
+      "status_codes": [],
+      "log_signatures": [
+        "Timeout waiting for AREQ - SYS - resetInd after SYS_RESET_REQ (0x41 0x00)",
+        "Coordinator fails to emit SYS_RESET_IND (0x41 0x80) after soft reset request"
+      ],
+      "upstream_root_cause": "When the host issues MT_SYS_RESET_REQ (0x41 0x00), sticky reset-control state on the microcontroller can prevent legacy coordinator firmware from completing the soft reboot and emitting MT_SYS_RESET_IND (0x41 0x80).",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by executing MT_SYS_RESET_REQ (0x41 0x00) soft resets cleanly and emitting MT_SYS_RESET_IND (0x41 0x80) deterministically."
+    },
+    {
+      "id": "TI-NV-001",
+      "vendor": "ti-zstack",
+      "layer": "UART-NPI",
+      "title": "Synchronous non-volatile flash write and page compaction stalls during active radio traffic",
+      "classification": "upstream-firmware-or-host-bug",
+      "policy": "strict-spec",
+      "spec_citations": [
+        "CC13x2/CC26x2 Technical Reference Manual (SWCU185) §7.4 (Flash Sector Erase Timing & Bus Stall)",
+        "TI Z-Stack MT API (SWRA198)"
+      ],
+      "mt_commands": [
+        "0x21 0x09",
+        "0x21 0x13",
+        "0x24 0x01"
+      ],
+      "nv_items": [
+        "0x0001",
+        "0x0004",
+        "0x0006",
+        "0x004C"
+      ],
+      "status_codes": [
+        "0x04",
+        "0x10",
+        "0x11"
+      ],
+      "log_signatures": [
+        "SRSP timeout or latency spike during SYS_OSAL_NV_WRITE_EXT / SYS_NV_WRITE",
+        "Dropped radio frames and UART timeouts during non-volatile flash page compaction"
+      ],
+      "upstream_root_cause": "Legacy coordinator firmware executes non-volatile flash writes and page compactions synchronously on the main stack thread during device joins, frame-counter updates, and host NVRAM writes, stalling radio and UART processing.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by processing MT non-volatile memory commands and security counter updates without blocking radio or UART execution."
+    },
+    {
+      "id": "TI-NWK-001",
+      "vendor": "ti-zstack",
+      "layer": "NWK",
+      "title": "Stale source-route retention ignoring link and delivery failure on cached source-route entries",
+      "classification": "normative-spec-violation",
+      "policy": "strict-spec",
+      "spec_citations": [
+        "Zigbee PRO R22 §3.6.3.5.3 / R23 §3.6.4.5.2 & §3.6.4.8 (Source Route Table Maintenance & Route Error Handling)"
+      ],
+      "mt_commands": [
+        "0x24 0x01",
+        "0x24 0x03",
+        "0x45 0xC4"
+      ],
+      "nv_items": [],
+      "status_codes": [
+        "0x02",
+        "0x0B",
+        "0xCD",
+        "0xE9"
+      ],
+      "log_signatures": [
+        "Repeated AF_DATA_CONFIRM (status=0xCD NWK_NO_ROUTE or 0xE9 MAC_NO_ACK) to multi-hop node",
+        "Stale source route retained after intermediate relay router reboots"
+      ],
+      "upstream_root_cause": "Legacy coordinator firmware retains cached source-route entries until passive aging expires instead of immediately invalidating the route upon receiving NWK Network Status 0x02 (NON_TREE_LINK_FAILURE), 0x0B (SOURCE_ROUTE_FAILURE), or delivery failure.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by immediately invalidating broken source routes on NWK Network Status 0x02, 0x0B, or next-hop delivery failure per Zigbee PRO R23 §3.6.4.8."
+    },
+    {
+      "id": "TI-NWK-002",
+      "vendor": "ti-zstack",
+      "layer": "NWK",
+      "title": "Many-to-One Route Record (0x05) suppression and NoRouteCache concentrator handling",
+      "classification": "normative-spec-violation",
+      "policy": "strict-spec",
+      "spec_citations": [
+        "Zigbee PRO R22 §3.6.3.5.2 / R23 §3.4.5 & §3.6.4.5.2 (Many-to-One Routing & Route Record Transmission Rules)"
+      ],
+      "mt_commands": [
+        "0x45 0xC4"
+      ],
+      "nv_items": [],
+      "status_codes": [],
+      "log_signatures": [
+        "Missing AREQ - ZDO - srcRtgInd (0x45 0xC4) after Many-to-One Route Request (MTORR)",
+        "Host source-route table not updated after mesh topology change"
+      ],
+      "upstream_root_cause": "When a Many-to-One Route Request (MTORR) refreshes an existing concentrator route with equal path cost, legacy firmware can suppress NWK Route Record (0x05) emission and omit ZDO_SRC_RTG_IND (0x45 0xC4) indications to the host.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by enforcing Zigbee PRO R23 §3.4.5 and §3.6.4.5.2 Route Record (0x05) emission and delivering ZDO_SRC_RTG_IND (0x45 0xC4) to the host."
+    },
+    {
+      "id": "TI-NWK-003",
+      "vendor": "ti-zstack",
+      "layer": "NWK",
+      "title": "Broadcast Transaction Table saturation returning 0xC7 (NWK_TABLE_FULL) during RREQ bursts",
+      "classification": "resource-sizing-limit",
+      "policy": "strict-spec",
+      "spec_citations": [
+        "Zigbee PRO R22 §3.6.5 / R23 §3.6.6 (Broadcast Transmission & Broadcast Transaction Table)"
+      ],
+      "mt_commands": [
+        "0x24 0x01",
+        "0x25 0x00",
+        "0x25 0x36"
+      ],
+      "nv_items": [],
+      "status_codes": [
+        "0xC7"
+      ],
+      "log_signatures": [
+        "Data request failed with error: 'NWK_TABLE_FULL' (0xc7)",
+        "SRSP or AF_DATA_CONFIRM returns status 199 (0xC7 ZNwkTableFull) during broadcast or RREQ burst"
+      ],
+      "upstream_root_cause": "Default coordinator firmware provisions a small Broadcast Transaction Table shared between mesh-wide router Route Request (RREQ) relays and coordinator broadcasts, returning 0xC7 (NWK_TABLE_FULL) during discovery bursts.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by provisioning expanded Broadcast Transaction Table capacity so mesh RREQ traffic does not starve coordinator broadcasts with 0xC7."
+    },
+    {
+      "id": "TI-NWK-004",
+      "vendor": "ti-zstack",
+      "layer": "NWK",
+      "title": "Emitting legacy Zigbee-2007 0x01 (TREE_LINK_FAILURE) instead of R23 0x02 (NON_TREE_LINK_FAILURE)",
+      "classification": "normative-spec-violation",
+      "policy": "strict-spec",
+      "spec_citations": [
+        "Zigbee PRO R22 §3.4.3.2 / R23 §3.4.3.3.1 (Table 3-56) & §3.6.4.8 (Network Status Codes)"
+      ],
+      "mt_commands": [
+        "0x45 0xC4"
+      ],
+      "nv_items": [],
+      "status_codes": [
+        "0x01",
+        "0x02"
+      ],
+      "log_signatures": [
+        "NWK Network Status (0x03) emitted with legacy status 0x01 (TREE_LINK_FAILURE) in Zigbee PRO",
+        "Delayed multi-hop route teardown after next-hop link failure"
+      ],
+      "upstream_root_cause": "When a mesh next-hop transmission fails, legacy firmware can emit obsolete Zigbee-2007 status code 0x01 (TREE_LINK_FAILURE) in NWK Network Status (0x03) commands instead of Zigbee PRO R23 status code 0x02 (NON_TREE_LINK_FAILURE).",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by emitting 0x02 (NON_TREE_LINK_FAILURE) per Zigbee PRO R23 Table 3-56 while accepting both 0x01 and 0x02 on ingress to invalidate broken routes."
+    },
+    {
+      "id": "TI-NWK-005",
+      "vendor": "ti-zstack",
+      "layer": "NWK",
+      "title": "NWK Network Status 0x0C (MANY_TO_ONE_ROUTE_FAILURE) propagation and concentrator route repair",
+      "classification": "normative-spec-violation",
+      "policy": "strict-spec",
+      "spec_citations": [
+        "Zigbee PRO R22 §3.6.3.5.2 / R23 §3.6.4.5.2 & Table 3-56 (Many-to-One Route Failure 0x0C)"
+      ],
+      "mt_commands": [
+        "0x25 0x45",
+        "0x45 0xC4"
+      ],
+      "nv_items": [],
+      "status_codes": [
+        "0x0C",
+        "0xCD"
+      ],
+      "log_signatures": [
+        "Multi-hop device uplink blackholes after parent router power-cycle until next MTORR",
+        "Missing NWK Network Status 0x0C (MANY_TO_ONE_ROUTE_FAILURE) or uncoordinated RREQ storm"
+      ],
+      "upstream_root_cause": "When an upstream concentrator link breaks, legacy routers fail to propagate NWK Network Status 0x0C (MANY_TO_ONE_ROUTE_FAILURE) back to the originating node or trigger local RREQ storms instead of concentrator MTORR repair.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by propagating NWK Network Status 0x0C (MANY_TO_ONE_ROUTE_FAILURE) and triggering concentrator route refresh per Zigbee PRO R23 §3.6.4.5."
+    },
+    {
+      "id": "TI-NWK-006",
+      "vendor": "ti-zstack",
+      "layer": "NWK",
+      "title": "NWK Link Status (0x08) neighbor aging, ascending short-address sorting, and parent aging",
+      "classification": "normative-spec-violation",
+      "policy": "strict-spec",
+      "spec_citations": [
+        "Zigbee PRO R22 §3.4.8.3 & §3.6.3.4 / R23 §3.4.8.3 & §3.6.4.4 (Link Status Command Formatting & Neighbor Outgoing Cost Aging)"
+      ],
+      "mt_commands": [
+        "0x25 0x31",
+        "0x45 0xB1"
+      ],
+      "nv_items": [],
+      "status_codes": [
+        "0xCD",
+        "0xE9"
+      ],
+      "log_signatures": [
+        "Asymmetric dead router link selected for routing after nwkRouterAgeLimit expires",
+        "Malformed or unsorted multi-frame NWK Link Status (0x08) neighbor list"
+      ],
+      "upstream_root_cause": "Legacy firmware does not promptly zero outgoing link cost when a neighbor omits the local node from NWK Link Status (0x08) or ages out past nwkRouterAgeLimit, and does not enforce ascending 16-bit short-address order across split Link Status subframes.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by enforcing ascending 16-bit address ordering and promptly zeroing stale neighbor outgoing link costs per Zigbee PRO R23 §3.4.8."
+    },
+    {
+      "id": "TI-NWK-007",
+      "vendor": "ti-zstack",
+      "layer": "NWK",
+      "title": "AODV Route Reply (0x02) next-hop cycle validation during concurrent route discovery",
+      "classification": "normative-spec-violation",
+      "policy": "strict-spec",
+      "spec_citations": [
+        "Zigbee PRO R22 §3.6.3.5.1 / R23 §3.4.2 & §3.6.4.5.1 (Route Reply Processing & Loop Prevention)"
+      ],
+      "mt_commands": [
+        "0x24 0x01",
+        "0x25 0x45"
+      ],
+      "nv_items": [],
+      "status_codes": [
+        "0xCD"
+      ],
+      "log_signatures": [
+        "Transient 2-node routing loop during simultaneous AODV Route Discovery",
+        "Packets oscillate between neighbor routers until NWK radius reaches 0"
+      ],
+      "upstream_root_cause": "Legacy firmware can accept a NWK Route Reply (0x02) when the responder short address equals the MAC source address of the relaying neighbor or creates a next-hop cycle, violating Zigbee PRO R23 loop-prevention rules.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by validating incoming NWK Route Reply (0x02) frames and route updates against self-referential next hops and routing cycles."
+    },
+    {
+      "id": "TI-NWK-008",
+      "vendor": "ti-zstack",
+      "layer": "NWK",
+      "title": "Minimum NWK header, Auxiliary Security Header, and MIC-32 length validation on secured NPDU ingress",
+      "classification": "upstream-firmware-or-host-bug",
+      "policy": "strict-spec",
+      "spec_citations": [
+        "Zigbee PRO R22/R23 §3.3.1 & §4.3.1 (NWK Header + Auxiliary Security Header + 4-byte MIC-32 Minimum Bounds)"
+      ],
+      "mt_commands": [
+        "0x41 0x80"
+      ],
+      "nv_items": [],
+      "status_codes": [],
+      "log_signatures": [
+        "Unexpected AREQ - SYS - resetInd (0x41 0x80) on malformed over-the-air NWK frame",
+        "Truncated secured NWK frame rejected before AES-CCM* authentication"
+      ],
+      "upstream_root_cause": "Legacy coordinator firmware does not validate that incoming secured NWK frames meet the minimum Zigbee PRO R23 header, Auxiliary Security Header, and MIC-32 length bounds before security processing.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by enforcing Zigbee PRO R23 §3.3.1 and §4.3.1 frame length bounds prior to AES-CCM* authentication and discarding malformed frames."
+    },
+    {
+      "id": "TI-NWK-009",
+      "vendor": "ti-zstack",
+      "layer": "NWK",
+      "title": "NWK Source Route Subframe and Route Record (0x05) relay-list length validation",
+      "classification": "normative-spec-violation",
+      "policy": "strict-spec",
+      "spec_citations": [
+        "Zigbee PRO R22/R23 §3.3.1.8 (Source Route Subframe) & §3.4.5 (Route Record Command)"
+      ],
+      "mt_commands": [
+        "0x45 0xC4"
+      ],
+      "nv_items": [],
+      "status_codes": [],
+      "log_signatures": [
+        "Invalid ZDO_SRC_RTG_IND (0x45 0xC4) relay list from malformed Route Record (0x05)",
+        "NWK Source Route Subframe relay-list bounds validation"
+      ],
+      "upstream_root_cause": "Legacy coordinator firmware does not validate NWK Source Route Subframe relay count and index bounds or verify that NWK Route Record (0x05) command payloads match the declared relay list length.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by enforcing Zigbee PRO R23 §3.3.1.8 and §3.4.5 bounds on all NWK Source Route Subframes and Route Record (0x05) commands."
+    },
+    {
+      "id": "TI-NWK-010",
+      "vendor": "ti-zstack",
+      "layer": "NWK",
+      "title": "Unknown-poller indirect NWK Leave (rejoin=1) handling and post-restore child poll retention",
+      "classification": "normative-spec-violation",
+      "policy": "strict-spec",
+      "spec_citations": [
+        "Zigbee PRO R22/R23 §3.6.10.4 (Handling of Data Requests from Unknown End Devices)"
+      ],
+      "mt_commands": [
+        "0x21 0x09",
+        "0x21 0x1D",
+        "0x21 0x34"
+      ],
+      "nv_items": [
+        "0x0001",
+        "0x0003"
+      ],
+      "status_codes": [
+        "0xE9",
+        "0xF0"
+      ],
+      "log_signatures": [
+        "Restored sleepy child disassociated by unexpected NWK Leave after poll",
+        "Unknown sleepy poller remains unassociated without receiving indirect NWK Leave (rejoin=1)"
+      ],
+      "upstream_root_cause": "Legacy coordinator firmware omits queuing an indirect NWK Leave (rejoin=1) when an unassociated sleepy device polls, or transmits an unexpected Leave after a restored child polls following a backup restore that omitted ZCD_NV_EX_ASSOC_TABLE (0x0003).",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by preserving restored children across backup restores and queuing a standard indirect NWK Leave (rejoin=1) per Zigbee PRO R23 §3.6.10.4 for unassociated pollers."
+    },
+    {
+      "id": "TI-NWK-011",
+      "vendor": "ti-zstack",
+      "layer": "NWK",
+      "title": "End Device Initiator (NWK FCF bit 13 = 1) frames from non-children require direct NWK Leave (rejoin=1)",
+      "classification": "normative-spec-violation",
+      "policy": "strict-spec",
+      "spec_citations": [
+        "Zigbee PRO R22/R23 §3.6.2.2 (End Device Initiator Bit & Non-Child Leave-with-Rejoin Rule)"
+      ],
+      "mt_commands": [
+        "0x44 0x81"
+      ],
+      "nv_items": [
+        "0x0001",
+        "0x0003"
+      ],
+      "status_codes": [],
+      "log_signatures": [
+        "Orphaned sleepy sensor transmitting End Device Initiator frames never triggers rejoin",
+        "Non-child End Device Initiator (NWK FCF bit 13) unicast ignored without NWK Leave (rejoin=1)"
+      ],
+      "upstream_root_cause": "Legacy coordinator firmware ignores direct 1-hop unicast frames with NWK Frame Control End Device Initiator (bit 13 = 1) from unassociated devices instead of replying with a direct NWK Leave (rejoin=1) per Zigbee PRO R23 §3.6.2.2.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by replying with a direct NWK Leave (rejoin=1) per Zigbee PRO R23 §3.6.2.2 when receiving a direct End Device Initiator frame from a non-child."
+    },
+    {
+      "id": "TI-SEC-001",
+      "vendor": "ti-zstack",
+      "layer": "APS",
+      "title": "Legacy (0x004C/0x0062) and extended (0x0004/0x0006) NVRAM link-key table consistency across backup/restore",
+      "classification": "upstream-firmware-or-host-bug",
+      "policy": "compat-shim",
+      "spec_citations": [
+        "Zigbee PRO R22/R23 §4.6.3.2 & §4.6.3.4 (Trust Center Link Key & Network Key Material Persistence)"
+      ],
+      "mt_commands": [
+        "0x21 0x08",
+        "0x21 0x09",
+        "0x21 0x1C",
+        "0x21 0x1D",
+        "0x21 0x33",
+        "0x21 0x34"
+      ],
+      "nv_items": [
+        "0x0003",
+        "0x0004",
+        "0x0006",
+        "0x004C",
+        "0x0062"
+      ],
+      "status_codes": [
+        "0xAD"
+      ],
+      "log_signatures": [
+        "Post-restore APS-encrypted commands fail with 0xAD (SECURITY_FAIL) or MIC mismatch",
+        "Legacy 0x004C and extended 0x0004/0x0006 link key tables out of sync after backup restore"
+      ],
+      "upstream_root_cause": "Legacy coordinator firmware stores link-key material across separate legacy NVRAM items (0x0062/0x004C) and extended subId tables (0x0004/0x0006), which can become inconsistent when host backup and restore tools read or write both interfaces.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by maintaining consistent APS link-key state across standard legacy and extended MT NVRAM commands."
+    },
+    {
+      "id": "TI-SEC-002",
+      "vendor": "ti-zstack",
+      "layer": "APS",
+      "title": "APSME-REQUEST-KEY.indication retry handling before Trust Center Verify-Key completes",
+      "classification": "normative-spec-violation",
+      "policy": "strict-spec",
+      "spec_citations": [
+        "Zigbee PRO R22/R23 §4.4.5.1.1 (Table 4-19), §4.4.5.2, §4.4.11.4, §4.5.4.1 & §4.7.3.8.1",
+        "BDB (16-02828-012) §10.2.5"
+      ],
+      "mt_commands": [
+        "0x45 0xCA"
+      ],
+      "nv_items": [
+        "0x0004",
+        "0x0006"
+      ],
+      "status_codes": [
+        "0xA7",
+        "0xAD"
+      ],
+      "log_signatures": [
+        "BDB Trust Center link key exchange fails on APS Request-Key retry (status 0xA7/0xAD)",
+        "APS Verify-Key MIC failure after duplicate Request-Key during onboarding"
+      ],
+      "upstream_root_cause": "If a joining node retries APS Request-Key (KeyType=0x04) because the initial Transport-Key response was delayed or lost, legacy Trust Center firmware can overwrite the provisional key before APS Verify-Key (0x0F) completes.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by handling duplicate APS Request-Key (0x08) retries idempotently during BDB Trust Center Link Key exchange per Zigbee BDB §10.2.5."
+    },
+    {
+      "id": "TI-SEC-003",
+      "vendor": "ti-zstack",
+      "layer": "APS",
+      "title": "APSME-VERIFY-KEY.indication sender IEEE address authentication against payload SourceAddress",
+      "classification": "normative-spec-violation",
+      "policy": "strict-spec",
+      "spec_citations": [
+        "Zigbee PRO R22/R23 §4.4.7.2, §4.4.11.7.4 & §4.7.3.8 (APS Verify-Key Command Processing & Source Binding)"
+      ],
+      "mt_commands": [
+        "0x45 0xCA"
+      ],
+      "nv_items": [
+        "0x0004"
+      ],
+      "status_codes": [
+        "0xAD"
+      ],
+      "log_signatures": [
+        "APS Verify-Key (0x0F) rejected on sender IEEE address mismatch (status 0xAD)",
+        "Trust Center validates APS Verify-Key sender address against payload SourceAddress"
+      ],
+      "upstream_root_cause": "Legacy Trust Center firmware does not verify that the 64-bit SourceAddress field inside an APS Verify-Key (0x0F) command payload matches the authenticated IEEE source address of the frame.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by enforcing that the APS Verify-Key (0x0F) payload SourceAddress strictly matches the authenticated sender IEEE address per Zigbee PRO R23 §4.4.11.7."
+    },
+    {
+      "id": "TI-SEC-004",
+      "vendor": "ti-zstack",
+      "layer": "NWK",
+      "title": "Neighbor incoming NWK frame counter reset on implicit Network Key promotion and warm reset persistence",
+      "classification": "normative-spec-violation",
+      "policy": "strict-spec",
+      "spec_citations": [
+        "Zigbee PRO R22/R23 §4.3.1.2, §4.4.11.5 & §4.6.3.4 (NWK Key Switch Frame Counter Reset & Persistence)"
+      ],
+      "mt_commands": [
+        "0x21 0x08",
+        "0x21 0x09",
+        "0x41 0x00"
+      ],
+      "nv_items": [
+        "0x0001",
+        "0x0007"
+      ],
+      "status_codes": [
+        "0xAD"
+      ],
+      "log_signatures": [
+        "Mesh devices dropped as replay attacks after implicit Network Key rotation",
+        "Anti-replay NWK frame counter state lost across coordinator warm reset"
+      ],
+      "upstream_root_cause": "When an alternate Network Key is promoted implicitly upon receiving a frame with the new key sequence number, legacy firmware does not reset per-neighbor incoming NWK frame counters and can lose incoming frame-counter state across warm resets.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by resetting incoming per-device NWK frame counters on Network Key promotion per Zigbee PRO R23 §4.3.1.2 and preserving counter state across resets."
+    },
+    {
+      "id": "TI-SEC-005",
+      "vendor": "ti-zstack",
+      "layer": "APS",
+      "title": "Unsecured Trust Center Rejoin APS Transport-Key delivery to sleepy child and duplicate Rejoin Response suppression",
+      "classification": "normative-spec-violation",
+      "policy": "strict-spec",
+      "spec_citations": [
+        "Zigbee PRO R22/R23 §3.6.1.6.1, §4.6.3.3.1–4.6.3.3.3 & §4.7.3.2 (Trust Center Rejoin vs Secured NWK Rejoin Procedure)"
+      ],
+      "mt_commands": [
+        "0x45 0xCA",
+        "0x45 0xC1"
+      ],
+      "nv_items": [
+        "0x0001",
+        "0x0004"
+      ],
+      "status_codes": [
+        "0xE9",
+        "0xF0"
+      ],
+      "log_signatures": [
+        "Unsecured Trust Center Rejoin from sleepy child fails to deliver APS Transport-Key",
+        "Duplicate NWK Rejoin Response burst transmitted on secured rejoin"
+      ],
+      "upstream_root_cause": "On an unsecured Trust Center Rejoin from a sleepy child, legacy firmware can fail to deliver the follow-up TCLK-encrypted APS Transport-Key to the child's updated short address, and on secured rejoins can emit redundant NWK Rejoin Response frames.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by delivering the NWK Rejoin Response and APS Transport-Key to rejoining sleepy children and emitting a single NWK Rejoin Response per request per Zigbee PRO R23 §3.6.1.4.2."
+    },
+    {
+      "id": "TI-SEC-006",
+      "vendor": "ti-zstack",
+      "layer": "APS",
+      "title": "Trust Center APS Remove-Device reply on unauthorized router rejoin and duplicate APS Tunnel suppression",
+      "classification": "normative-spec-violation",
+      "policy": "strict-spec",
+      "spec_citations": [
+        "Zigbee PRO R22/R23 §2.2.8.4.2 (Table 2-23), §4.4.4, §4.4.11.3, §4.6.3.2.2, §4.6.3.7.1 & §4.7.3.6 (APS Update-Device & Remove-Device)"
+      ],
+      "mt_commands": [
+        "0x45 0xCA"
+      ],
+      "nv_items": [],
+      "status_codes": [],
+      "log_signatures": [
+        "Unauthorized Trust Center Rejoin via router ignored without sending APS Remove-Device",
+        "Duplicate APS Tunnel (0x0E) Transport-Key burst on router-assisted join"
+      ],
+      "upstream_root_cause": "When an unauthorized device sends an unsecured rejoin through a parent router (APS Update-Device status=0x03) while joining is closed or without a verified TCLK, legacy firmware drops the frame instead of sending APS Remove-Device (0x07), and can emit duplicate APS Tunnel frames on permitted joins.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by replying with APS Remove-Device (0x07) for unauthorized router-forwarded rejoins and transmitting a single APS Tunnel (0x0E) Transport-Key per permitted join per Zigbee PRO R23 §4.6.3.2."
+    },
+    {
+      "id": "TI-SEC-007",
+      "vendor": "ti-zstack",
+      "layer": "APS",
+      "title": "ZDO_MGMT_LEAVE_REQ (0x25 0x34) preservation of legacy ZCD_NV_APS_LINK_KEY_TABLE (0x004C) entries",
+      "classification": "upstream-firmware-or-host-bug",
+      "policy": "strict-spec",
+      "spec_citations": [
+        "TI Z-Stack Monitor and Test (MT) API (SWRA198) §3.12.1.20 (MT_ZDO_MGMT_LEAVE_REQ 0x25 0x34) & NVRAM Integrity"
+      ],
+      "mt_commands": [
+        "0x25 0x34",
+        "0x25 0x24",
+        "0x21 0x08",
+        "0x21 0x1C"
+      ],
+      "nv_items": [
+        "0x0001",
+        "0x0004",
+        "0x0006",
+        "0x004C"
+      ],
+      "status_codes": [],
+      "log_signatures": [
+        "ZCD_NV_APS_LINK_KEY_TABLE (0x004C) invalid after ZDO_MGMT_LEAVE_REQ (0x25 0x34)",
+        "Backup export reads invalid record count or entries from NVRAM item 0x004C"
+      ],
+      "upstream_root_cause": "When removing a device via ZDO_MGMT_LEAVE_REQ (0x25 0x34), legacy coordinator firmware can overwrite the record-count header and entry contents of legacy NVRAM item ZCD_NV_APS_LINK_KEY_TABLE (0x004C).",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by clearing only the removed device's link-key entry while preserving valid NVRAM table headers and remaining device records."
+    },
+    {
+      "id": "TI-SEC-008",
+      "vendor": "ti-zstack",
+      "layer": "APS",
+      "title": "APS Switch-Key (0x09) APS Auxiliary Security Header validation and interoperability (Ruling 7.6)",
+      "classification": "normative-spec-violation",
+      "policy": "compat-shim",
+      "spec_citations": [
+        "Zigbee PRO R22/R23 §4.4.6.3, §4.4.11.5 & §4.6.3.4 (APSME-SWITCH-KEY Security Policy — Ruling 7.6)"
+      ],
+      "mt_commands": [
+        "0x21 0x08",
+        "0x21 0x09",
+        "0x25 0x4A"
+      ],
+      "nv_items": [
+        "0x0007"
+      ],
+      "status_codes": [],
+      "log_signatures": [
+        "Network key rotation via APS Switch-Key (0x09) rejected or accepted without APS security",
+        "ZDO_EXT_SWITCH_NWK_KEY (0x25 0x4A) interoperability failure across mixed routers"
+      ],
+      "upstream_root_cause": "Under Zigbee PRO R23 §4.4.6.3 and Ruling 7.6, APS Switch-Key (0x09) requires APS-layer security in addition to NWK security, whereas legacy firmware emits or accepts NWK-only secured Switch-Key frames.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by transmitting outbound APS Switch-Key (0x09) commands with APS security per Zigbee PRO R23 §4.4.6.3 while maintaining router interoperability."
+    },
+    {
+      "id": "TI-SEC-009",
+      "vendor": "ti-zstack",
+      "layer": "APS",
+      "title": "APS Auxiliary Security Header ExtendedNonce (bit 5) SourceIEEE handling on APS-secured frames (Ruling 5.8)",
+      "classification": "normative-spec-violation",
+      "policy": "compat-shim",
+      "spec_citations": [
+        "Zigbee PRO R22/R23 §4.4.1.1–4.4.1.2, §4.4.11.6, §4.5.1.1.3 & §4.5.1.3 (APS Auxiliary Security Header ExtendedNonce)"
+      ],
+      "mt_commands": [
+        "0x45 0xCA"
+      ],
+      "nv_items": [],
+      "status_codes": [
+        "0xAD"
+      ],
+      "log_signatures": [
+        "APS-secured Request-Key / Verify-Key / Confirm-Key fails AES-CCM* MIC-32 check",
+        "Inbound APS frame with ExtendedNonce=0 (5-byte Aux header) rejected during onboarding"
+      ],
+      "upstream_root_cause": "Per Zigbee PRO R23 §4.5.1.1.3 (Ruling 5.8), inbound APS-secured frames may set ExtendedNonce=0 (omitting the 8-byte SourceIEEE from the APS Aux header) or ExtendedNonce=1 (including the 8-byte SourceIEEE).",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by accepting both ExtendedNonce=0 and ExtendedNonce=1 on inbound APS-secured frames and setting ExtendedNonce=1 on outbound frames per Zigbee PRO R23 §4.5.1.1.3."
+    },
+    {
+      "id": "TI-ZDO-001",
+      "vendor": "ti-zstack",
+      "layer": "ZDO",
+      "title": "Concurrent Trust Center joining device timeout and duplicate join request state management",
+      "classification": "upstream-firmware-or-host-bug",
+      "policy": "strict-spec",
+      "spec_citations": [
+        "Zigbee Base Device Behavior (BDB 16-02828-012) §5.1 (Table 1: bdbcTrustCenterNodeJoinTimeout) & §10.2.5"
+      ],
+      "mt_commands": [
+        "0x45 0xCA",
+        "0x45 0xC1"
+      ],
+      "nv_items": [],
+      "status_codes": [],
+      "log_signatures": [
+        "Unexpected AREQ - SYS - resetInd (0x41 0x80) during concurrent permitJoin onboarding",
+        "Trust Center joining device list timeout failure during multi-node commissioning"
+      ],
+      "upstream_root_cause": "During concurrent device onboarding when multiple joining nodes time out or send duplicate join requests simultaneously, legacy Trust Center joining-list expiration handling can trigger an unexpected coordinator reset.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by managing Trust Center joining-device timeouts and concurrent commissioning state deterministically per Zigbee BDB §8.4."
+    },
+    {
+      "id": "TI-ZDO-002",
+      "vendor": "ti-zstack",
+      "layer": "ZDO",
+      "title": "ZCD_NV_EX_TCLK_TABLE (0x0004) record initialization and APS frame-counter reset on key update",
+      "classification": "upstream-firmware-or-host-bug",
+      "policy": "strict-spec",
+      "spec_citations": [
+        "Zigbee PRO R22/R23 §4.4.12 (Table 4-36: apsDeviceKeyPairSet) & BDB (16-02828-012) §10.2.5"
+      ],
+      "mt_commands": [
+        "0x21 0x1D",
+        "0x21 0x34",
+        "0x45 0xCA"
+      ],
+      "nv_items": [
+        "0x0004"
+      ],
+      "status_codes": [
+        "0xAD"
+      ],
+      "log_signatures": [
+        "coordinator_backup.json contains non-zero initial rxFrmCntr / txFrmCntr",
+        "Re-associated device APS commands dropped by anti-replay check after TCLK update"
+      ],
+      "upstream_root_cause": "When installing or updating a Trust Center Link Key in ZCD_NV_EX_TCLK_TABLE (0x0004), legacy firmware can leave uninitialized bytes in the NVRAM record or fail to reset both incoming and outgoing APS frame counters.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by zero-initializing ZCD_NV_EX_TCLK_TABLE (0x0004) records and resetting incoming and outgoing APS frame counters upon link-key installation."
+    },
+    {
+      "id": "TI-ZDO-003",
+      "vendor": "ti-zstack",
+      "layer": "ZDO",
+      "title": "Zero-address IEEE entry prevention in address manager and ZDO_MGMT_LQI_RSP (0x45 0xB1)",
+      "classification": "normative-spec-violation",
+      "policy": "strict-spec",
+      "spec_citations": [
+        "Zigbee PRO R22/R23 §2.4.4.3.2 (Tables 2-101 & 2-102: Mgmt_Lqi_rsp NeighborTableListRecord Format — 64-bit Extended Address)"
+      ],
+      "mt_commands": [
+        "0x25 0x31",
+        "0x45 0xB1",
+        "0x21 0x1D",
+        "0x21 0x34"
+      ],
+      "nv_items": [
+        "0x0001"
+      ],
+      "status_codes": [],
+      "log_signatures": [
+        "ZDO_MGMT_LQI_RSP (0x45 0xB1) reports neighbor ExtendedAddress = 0x0000000000000000",
+        "All-zero 00:00:00:00:00:00:00:00 entries in ZCD_NV_EX_ADDRMGR (0x0001)"
+      ],
+      "upstream_root_cause": "When a neighbor is heard via NWK Link Status (0x08) before its 64-bit IEEE address is recorded in the address manager, legacy firmware can report ExtendedAddress = 0x0000000000000000 in Mgmt_Lqi_rsp (0x8031) and persist all-zero IEEE entries in 0x0001.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by recording neighbor 64-bit IEEE addresses from NWK Link Status (0x08) and Device_annce (0x0013) frames and rejecting all-zero IEEE entries in ZCD_NV_EX_ADDRMGR (0x0001)."
+    },
+    {
+      "id": "TI-ZDO-004",
+      "vendor": "ti-zstack",
+      "layer": "ZDO",
+      "title": "MT_ZDO status indication (0x45 0xC0) and ZDO_MSG_CB_INCOMING (0x45 0xFF) on error Simple_Desc_rsp (0x8004)",
+      "classification": "upstream-firmware-or-host-bug",
+      "policy": "compat-shim",
+      "spec_citations": [
+        "Zigbee PRO R22 §2.4.4.1.5 / R23 §2.4.4.2.5 (Simple_Desc_rsp Format)",
+        "TI MT API (SWRA198) §3.12.2.5"
+      ],
+      "mt_commands": [
+        "0x25 0x04",
+        "0x45 0x84",
+        "0x45 0xC0",
+        "0x45 0xFF"
+      ],
+      "nv_items": [],
+      "status_codes": [
+        "0x82",
+        "0x83"
+      ],
+      "log_signatures": [
+        "AREQ 0x45 0xC0 emitted instead of ZDO_SIMPLE_DESC_RSP (0x45 0x84) on error status",
+        "ZDO_SIMPLE_DESC_REQ (0x25 0x04) on inactive endpoint returns 3-byte 0x45 0xC0 frame"
+      ],
+      "upstream_root_cause": "When an incoming ZDO Simple_Desc_rsp (0x8004) carries a non-zero ZDP error status (5-byte payload without a descriptor body), legacy MT_ZDO firmware emits a 3-byte 0x45 0xC0 exception frame instead of MT_ZDO_SIMPLE_DESC_RSP (0x45 0x84).",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by preserving the MT 0x45 0xC0 status indication contract while also delivering registered ZDO_MSG_CB_INCOMING (0x45 0xFF) cluster callbacks."
+    },
+    {
+      "id": "TI-ZDO-005",
+      "vendor": "ti-zstack",
+      "layer": "ZDO",
+      "title": "Xiaomi/Lumi OUI (04:CF:8C / 54:EF:44) manufacturer code 0x115F compatibility in ZDO Node_Desc_rsp (0x8002)",
+      "classification": "normative-spec-violation",
+      "policy": "compat-shim",
+      "spec_citations": [
+        "Zigbee PRO R22/R23 §2.4.3.1.3, §2.4.4.2.3 & §2.3.2.3 (Node_Desc_req / Node_Desc_rsp Manufacturer Code)"
+      ],
+      "mt_commands": [
+        "0x25 0x02",
+        "0x45 0x82"
+      ],
+      "nv_items": [],
+      "status_codes": [],
+      "log_signatures": [
+        "Legacy Xiaomi/Aqara (Lumi OUI 04:CF:8C / 54:EF:44) sensor drops after Node_Desc_req",
+        "ZDO Node_Desc_rsp (0x8002) to Lumi end device requires ManufacturerCode 0x115F"
+      ],
+      "upstream_root_cause": "Legacy Xiaomi/Aqara (Lumi) end devices query the coordinator's ZDO Node_Desc_req (0x0002) during onboarding and leave the network if the coordinator's Node_Desc_rsp (0x8002) does not report manufacturer code 0x115F.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by reporting ManufacturerCode 0x115F in over-the-air ZDO Node_Desc_rsp (0x8002) replies to Xiaomi/Lumi OUI (04:CF:8C / 54:EF:44) requesters."
+    },
+    {
+      "id": "TI-ZDO-006",
+      "vendor": "ti-zstack",
+      "layer": "ZDO",
+      "title": "ZDO_TC_DEV_IND (0x45 0xCA) emission on direct coordinator rejoin and router-forwarded APS Update-Device",
+      "classification": "upstream-firmware-or-host-bug",
+      "policy": "compat-shim",
+      "spec_citations": [
+        "TI Z-Stack Monitor and Test (MT) API (SWRA198) §3.12.2.25 (MT_ZDO_TC_DEV_IND 0x45 0xCA)",
+        "Zigbee PRO R22/R23 §4.4.3.2, §4.6.3.3.1 & §4.6.3.3.3"
+      ],
+      "mt_commands": [
+        "0x45 0xCA"
+      ],
+      "nv_items": [],
+      "status_codes": [],
+      "log_signatures": [
+        "AREQ: ZDO - tcDeviceInd (0x45 0xCA) expected on direct coordinator join or rejoin",
+        "Host fails to learn updated short address on direct child rejoin without 0x45 0xCA"
+      ],
+      "upstream_root_cause": "Host stacks (zigbee-herdsman and zigpy-znp) rely on MT_ZDO_TC_DEV_IND (0x45 0xCA) notifications for both router-forwarded APS Update-Device (0x06) commands and direct coordinator joins or rejoins.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by emitting MT_ZDO_TC_DEV_IND (0x45 0xCA) on both direct coordinator joins/rejoins and router-forwarded APS Update-Device (0x06) commands."
+    },
+    {
+      "id": "ZH-AF-001",
+      "vendor": "zigbee-herdsman",
+      "layer": "APS",
+      "title": "Unacknowledged ZCL OTA ImageBlockResponse (options=0x00) single-frame MTU and source-routed fragmentation",
+      "classification": "upstream-firmware-or-host-bug",
+      "policy": "strict-spec",
+      "spec_citations": [
+        "Zigbee Cluster Library (ZCL R8) §11.13.6 (Image Block Response) & Zigbee PRO R22/R23 §2.2.8.4.5"
+      ],
+      "mt_commands": [
+        "0x24 0x01",
+        "0x24 0x03"
+      ],
+      "nv_items": [],
+      "status_codes": [
+        "0x02",
+        "0x10"
+      ],
+      "log_signatures": [
+        "Failed to update '<device>' (ImageBlockResponse failed with status=2 or 0x10 MEM_ERROR)",
+        "SREQ: AF - dataRequest - {\"clusterid\":25,\"options\":0,\"len\":71}"
+      ],
+      "upstream_root_cause": "Host OTA transfers send ZCL ImageBlockResponse via MT_AF_DATA_REQUEST (0x24 0x01) with options=0x00 (unacknowledged); legacy coordinator firmware either forces broken unacknowledged APS fragmentation (TI-AF-001) or rejects source-routed requests with status 0x10 (TI-AF-002).",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by transmitting unacknowledged OTA ImageBlockResponse frames as single IEEE 802.15.4 packets up to the physical PSDU limit and supporting APS fragmentation on acknowledged source-routed requests."
+    },
+    {
+      "id": "ZH-AF-002",
+      "vendor": "zigbee-herdsman",
+      "layer": "APS",
+      "title": "8-bit transId wrap-around collision protection on in-flight AF_DATA_CONFIRM (0x44 0x80) transactions",
+      "classification": "upstream-firmware-or-host-bug",
+      "policy": "strict-spec",
+      "spec_citations": [
+        "TI Z-Stack Monitor and Test (MT) API (SWRA198) §3.9.1.1 & §3.9.2.1 (MT_AF_DATA_REQUEST TransID & MT_AF_DATA_CONFIRM)"
+      ],
+      "mt_commands": [
+        "0x24 0x01",
+        "0x24 0x02",
+        "0x24 0x03",
+        "0x44 0x80"
+      ],
+      "nv_items": [],
+      "status_codes": [
+        "0xB8",
+        "0xF0"
+      ],
+      "log_signatures": [
+        "AREQ: AF - dataConfirm - {\"endpoint\":1,\"transid\":X,\"status\":240} resolves wrong router request",
+        "Delayed 0xF0 MAC_TRANSACTION_EXPIRED confirm collides on wrapped 8-bit transId"
+      ],
+      "upstream_root_cause": "Host stacks match incoming AF_DATA_CONFIRM (0x44 0x80) indications solely by 8-bit transId; if a sleepy-child transaction remains queued while 256 new requests wrap the 8-bit counter, the delayed 0xF0 expiration confirm resolves the newer request.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by rejecting duplicate in-flight (endpoint, transId) requests at the synchronous SRSP boundary with status 0xB8 (Z_APS_DUPLICATE_ENTRY)."
+    },
+    {
+      "id": "ZH-APS-001",
+      "vendor": "zigbee-herdsman",
+      "layer": "APS",
+      "title": "Compacted vs physical address manager index mapping during NVRAM backup export and restore",
+      "classification": "upstream-firmware-or-host-bug",
+      "policy": "compat-shim",
+      "spec_citations": [
+        "TI Z-Stack NVRAM Layout (ZCD_NV_EX_ADDRMGR 0x0001 vs ZCD_NV_APS_LINK_KEY_TABLE 0x004C addressManagerIndex)"
+      ],
+      "mt_commands": [
+        "0x21 0x08",
+        "0x21 0x1C",
+        "0x21 0x1D",
+        "0x21 0x32",
+        "0x21 0x33",
+        "0x21 0x34"
+      ],
+      "nv_items": [
+        "0x0001",
+        "0x0004",
+        "0x0006",
+        "0x004C"
+      ],
+      "status_codes": [],
+      "log_signatures": [
+        "APS Link Keys paired to wrong IEEE addresses in coordinator_backup.json after device removal",
+        "addressManagerIndex (AMI) offset shift across sparse ZCD_NV_EX_ADDRMGR (0x0001) holes"
+      ],
+      "upstream_root_cause": "Host backup export filters ZCD_NV_EX_ADDRMGR (0x0001) into a compacted array while indexing it by physical addressManagerIndex (AMI) from ZCD_NV_APS_LINK_KEY_TABLE (0x004C), shifting link keys after any vacated middle slot onto the wrong device.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by maintaining consistent IEEE-to-link-key binding across NVRAM backup reads and restores regardless of sparse address-manager slots."
+    },
+    {
+      "id": "ZH-APS-002",
+      "vendor": "zigbee-herdsman",
+      "layer": "APS",
+      "title": "Pre-initialized extended NVRAM table capacity during host restoreBackup() device population",
+      "classification": "upstream-firmware-or-host-bug",
+      "policy": "compat-shim",
+      "spec_citations": [
+        "TI Z-Stack Monitor and Test (MT) API (SWRA198) §3.1.8–3.1.12 (SYS_OSAL_NV_WRITE_EXT & SYS_NV_WRITE)"
+      ],
+      "mt_commands": [
+        "0x21 0x09",
+        "0x21 0x1D",
+        "0x21 0x32",
+        "0x21 0x34"
+      ],
+      "nv_items": [
+        "0x0001",
+        "0x0004",
+        "0x0006"
+      ],
+      "status_codes": [
+        "0x09",
+        "0x0A"
+      ],
+      "log_signatures": [
+        "TypeError: Cannot set properties of undefined (setting 'type') in restoreBackup()",
+        "addressManagerTable.getNextFree() returns undefined when backup devices exceed 0x0001 capacity"
+      ],
+      "upstream_root_cause": "Host restoreBackup() sizes its in-memory address manager table from the target coordinator's existing ZCD_NV_EX_ADDRMGR (0x0001) slot count and throws a TypeError if the backup contains more devices than the pre-initialized table.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by exposing pre-initialized extended NVRAM tables (0x0001, 0x0004, and 0x0006) across full coordinator capacity."
+    },
+    {
+      "id": "ZH-APS-003",
+      "vendor": "zigbee-herdsman",
+      "layer": "APS",
+      "title": "Default ZCD_NV_APS_LINK_KEY_TABLE (0x004C) availability on newly formed coordinator before first join",
+      "classification": "upstream-firmware-or-host-bug",
+      "policy": "compat-shim",
+      "spec_citations": [
+        "TI Z-Stack Monitor and Test (MT) API (SWRA198) §3.1.8 & §3.1.11 (SYS_OSAL_NV_LENGTH 0x21 0x13 & SYS_OSAL_NV_READ_EXT 0x21 0x1C on 0x004C)"
+      ],
+      "mt_commands": [
+        "0x21 0x08",
+        "0x21 0x13",
+        "0x21 0x1C"
+      ],
+      "nv_items": [
+        "0x004C"
+      ],
+      "status_codes": [
+        "0x09"
+      ],
+      "log_signatures": [
+        "SREQ '--> SYS - osalNvReadExt - {\"id\":76}' failed with status 0x09 (NV_ITEM_UNINIT)",
+        "createBackup() fails on freshly formed coordinator before first device join"
+      ],
+      "upstream_root_cause": "On a newly formed coordinator before any device has joined, legacy firmware may leave ZCD_NV_APS_LINK_KEY_TABLE (0x004C) uninitialized, causing host createBackup() reads of item 0x004C to fail with status 0x09 (NV_ITEM_UNINIT).",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by always serving a valid, initialized ZCD_NV_APS_LINK_KEY_TABLE (0x004C) NVRAM item once the network is formed."
+    },
+    {
+      "id": "ZH-APS-004",
+      "vendor": "zigbee-herdsman",
+      "layer": "APS",
+      "title": "SYS_OSAL_NV_READ_EXT / WRITE_EXT 240-byte chunk boundary handling on ZCD_NV_APS_LINK_KEY_TABLE (0x004C)",
+      "classification": "upstream-firmware-or-host-bug",
+      "policy": "compat-shim",
+      "spec_citations": [
+        "TI Z-Stack Monitor and Test (MT) API (SWRA198) §3.1.8–3.1.12 (Offset-based Chunked NV Read/Write)"
+      ],
+      "mt_commands": [
+        "0x21 0x08",
+        "0x21 0x09",
+        "0x21 0x1C",
+        "0x21 0x1D"
+      ],
+      "nv_items": [
+        "0x004C"
+      ],
+      "status_codes": [],
+      "log_signatures": [
+        "SYS_OSAL_NV_WRITE_EXT (0x21 0x1D) 240-byte chunks split records in 0x004C",
+        "Link-key index mismatch when partial 0x004C chunk writes are processed mid-transfer"
+      ],
+      "upstream_root_cause": "Host NVRAM backup and restore transfers ZCD_NV_APS_LINK_KEY_TABLE (0x004C) in 240-byte SYS_OSAL_NV_READ_EXT (0x21 0x1C) and SYS_OSAL_NV_WRITE_EXT (0x21 0x1D) chunks whose boundaries split multi-byte link-key records.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by supporting arbitrary offset-based SYS_OSAL_NV_READ_EXT and SYS_OSAL_NV_WRITE_EXT chunk boundaries on item 0x004C."
+    },
+    {
+      "id": "ZH-APS-005",
+      "vendor": "zigbee-herdsman",
+      "layer": "APS",
+      "title": "Consistent link-key resolution across 0x004C, 0x0006, and 0x0004 NVRAM tables during backup and restore",
+      "classification": "upstream-firmware-or-host-bug",
+      "policy": "compat-shim",
+      "spec_citations": [
+        "TI Z-Stack 3.x Extended NVRAM Specification (ZCD_NV_EX_TCLK_TABLE 0x0004 & ZCD_NV_EX_APS_KEY_DATA_TABLE 0x0006)"
+      ],
+      "mt_commands": [
+        "0x21 0x08",
+        "0x21 0x09",
+        "0x21 0x1C",
+        "0x21 0x1D",
+        "0x21 0x33",
+        "0x21 0x34"
+      ],
+      "nv_items": [
+        "0x0004",
+        "0x0006",
+        "0x004C"
+      ],
+      "status_codes": [
+        "0xAD"
+      ],
+      "log_signatures": [
+        "Seed-derived TCLK (nv.tclk_seed) lost across createBackup() / restoreBackup()",
+        "APS link-key mismatch between 0x004C/0x0006 and 0x0004 (EX_TCLK_TABLE)"
+      ],
+      "upstream_root_cause": "Host backup and restore logic applies asymmetric precedence between legacy 0x004C, extended 0x0006 (EX_APS_KEY_DATA_TABLE), and 0x0004 (EX_TCLK_TABLE) when exporting and restoring seed-derived Trust Center Link Keys.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by exposing consistent APS link-key records across 0x004C, 0x0006, and 0x0004 during host backup reads and restore writes."
+    },
+    {
+      "id": "ZH-APS-006",
+      "vendor": "zigbee-herdsman",
+      "layer": "APS",
+      "title": "Contiguous subId slot traversal across extended NVRAM tables (0x0001, 0x0004, 0x0006)",
+      "classification": "upstream-firmware-or-host-bug",
+      "policy": "compat-shim",
+      "spec_citations": [
+        "TI Z-Stack Monitor and Test (MT) API (SWRA198) §3.1.11–3.1.12 (Extended NV SubId Iteration)"
+      ],
+      "mt_commands": [
+        "0x21 0x1C",
+        "0x21 0x1D",
+        "0x21 0x31",
+        "0x21 0x32",
+        "0x21 0x33",
+        "0x21 0x34"
+      ],
+      "nv_items": [
+        "0x0001",
+        "0x0004",
+        "0x0006"
+      ],
+      "status_codes": [
+        "0x00",
+        "0x09",
+        "0x0A"
+      ],
+      "log_signatures": [
+        "readTable() / writeTable() stops at first non-ZSuccess subId gap in extended NV table",
+        "Devices at higher subId slots truncated during backup or restore after a hole"
+      ],
+      "upstream_root_cause": "Host extended-NVRAM table readers and writers iterate subId from 0 upward and stop at the first non-ZSuccess (0x09/0x0A) response, truncating valid device records stored after an uninitialized subId slot.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by serving contiguous ZSuccess (0x00) responses across all valid subId slots of extended NVRAM tables (0x0001, 0x0004, and 0x0006)."
+    },
+    {
+      "id": "ZH-APS-007",
+      "vendor": "zigbee-herdsman",
+      "layer": "APS",
+      "title": "Non-blocking NVRAM write completion during multi-slot host restoreBackup() sweeps",
+      "classification": "upstream-firmware-or-host-bug",
+      "policy": "compat-shim",
+      "spec_citations": [
+        "TI Z-Stack Monitor and Test (MT) API (SWRA198) §3.1.9 & §3.1.12 (SYS_OSAL_NV_WRITE_EXT & SYS_NV_WRITE)"
+      ],
+      "mt_commands": [
+        "0x21 0x09",
+        "0x21 0x1D",
+        "0x21 0x32",
+        "0x21 0x34"
+      ],
+      "nv_items": [
+        "0x0001",
+        "0x0004",
+        "0x0006",
+        "0x004C"
+      ],
+      "status_codes": [
+        "0x04",
+        "0x11"
+      ],
+      "log_signatures": [
+        "SYS_NV_WRITE / SYS_OSAL_NV_WRITE_EXT fails with status=4 (NV_OPER_FAILED) or status=17 during restore",
+        "Extended NV slot writes during restoreBackup() fail with timeout or buffer error"
+      ],
+      "upstream_root_cause": "Host restoreBackup() issues hundreds of consecutive SYS_OSAL_NV_WRITE_EXT and SYS_NV_WRITE requests; on legacy coordinator firmware, synchronous flash page compactions during this burst can return status 0x04 (NV_OPER_FAILED) or 0x11.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by completing host restoreBackup() NVRAM write sweeps deterministically with ZSuccess (0x00)."
+    },
+    {
+      "id": "ZH-NPI-001",
+      "vendor": "zigbee-herdsman",
+      "layer": "UART-NPI",
+      "title": "Arbitrary TCP and UART byte-boundary reassembly for fragmented or coalesced UNPI/MT frames",
+      "classification": "upstream-firmware-or-host-bug",
+      "policy": "strict-spec",
+      "spec_citations": [
+        "TI Z-Stack Monitor and Test (MT) API (SWRA198) §2.2 (UNPI Stream Framing over TCP/Serial Bridges)"
+      ],
+      "mt_commands": [
+        "0x21 0x01",
+        "0x24 0x01"
+      ],
+      "nv_items": [],
+      "status_codes": [],
+      "log_signatures": [
+        "Split UNPI frame across TCP packets on tcp://<host>:6638 causes SREQ timeout",
+        "Uncoalesced socket.write() calls fragment MT frames across TCP segments"
+      ],
+      "upstream_root_cause": "Host TCP-to-UART serial bridges can split a single UNPI/MT frame across multiple TCP segments or coalesce multiple frames into a single read buffer.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by reassembling UNPI/MT frames across arbitrary byte boundaries and multi-frame bursts."
+    },
+    {
+      "id": "ZH-NPI-002",
+      "vendor": "zigbee-herdsman",
+      "layer": "UART-NPI",
+      "title": "Synchronous SRSP prioritization ahead of asynchronous AREQ bursts on the host serial transport",
+      "classification": "upstream-firmware-or-host-bug",
+      "policy": "strict-spec",
+      "spec_citations": [
+        "TI Z-Stack Monitor and Test (MT) API (SWRA198) §2.1 (Asynchronous AREQ Rate vs SREQ/SRSP Latency)"
+      ],
+      "mt_commands": [
+        "0x44 0x81",
+        "0x45 0xC4",
+        "0x45 0xCB"
+      ],
+      "nv_items": [],
+      "status_codes": [],
+      "log_signatures": [
+        "Error: SRSP - AF - dataRequest after 6000ms during heavy AREQ telemetry flood",
+        "Synchronous UnpiParser drain delayed behind queued AREQ callbacks"
+      ],
+      "upstream_root_cause": "Under a heavy burst of inbound asynchronous AREQ notifications, legacy coordinator firmware queues AREQs ahead of pending SRSPs, delaying host SRSP processing past the 6000 ms SREQ timeout.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by prioritizing synchronous SRSP transmission ahead of asynchronous AREQs on the serial transport."
+    },
+    {
+      "id": "ZH-NPI-003",
+      "vendor": "zigbee-herdsman",
+      "layer": "UART-NPI",
+      "title": "Deterministic SREQ/AREQ error confirmation delivery to prevent stale host waiter matchers",
+      "classification": "upstream-firmware-or-host-bug",
+      "policy": "strict-spec",
+      "spec_citations": [
+        "TI Z-Stack Monitor and Test (MT) API (SWRA198) §2.1 (SREQ -> SRSP -> AREQ Two-Phase Transaction Lifecycle)"
+      ],
+      "mt_commands": [
+        "0x24 0x01",
+        "0x25 0x02",
+        "0x25 0x04",
+        "0x25 0x31"
+      ],
+      "nv_items": [],
+      "status_codes": [
+        "0x10",
+        "0xC7",
+        "0xCD"
+      ],
+      "log_signatures": [
+        "Leaked Waitress AREQ matcher resolves later ZDO/AF transaction out of order",
+        "Timeout after 10000ms on ZDO or AF waiter after prerequisite SREQ error"
+      ],
+      "upstream_root_cause": "In two-phase host request flows, an asynchronous AREQ waiter can remain registered when the prerequisite SREQ fails or times out, allowing a later AREQ to resolve a subsequent transaction out of order.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by delivering deterministic synchronous SRSP and asynchronous confirmation statuses before host waiter timeouts expire."
+    },
+    {
+      "id": "ZH-NPI-004",
+      "vendor": "zigbee-herdsman",
+      "layer": "UART-NPI",
+      "title": "Deterministic NVRAM SREQ response completion to prevent silent host retry exhaustion",
+      "classification": "upstream-firmware-or-host-bug",
+      "policy": "compat-shim",
+      "spec_citations": [
+        "TI Z-Stack Monitor and Test (MT) API (SWRA198) §3.1.7–3.1.12 (SYS_OSAL_NV_* Error Propagation)"
+      ],
+      "mt_commands": [
+        "0x21 0x07",
+        "0x21 0x08",
+        "0x21 0x09",
+        "0x21 0x13",
+        "0x21 0x1C",
+        "0x21 0x1D",
+        "0x21 0x32",
+        "0x21 0x33",
+        "0x21 0x34"
+      ],
+      "nv_items": [
+        "0x0001",
+        "0x0004",
+        "0x0006",
+        "0x004C"
+      ],
+      "status_codes": [
+        "0x04",
+        "0x11"
+      ],
+      "log_signatures": [
+        "AdapterNvMemory.retry() swallows 3 consecutive NV SREQ errors and returns undefined",
+        "Silent NVRAM truncation during createBackup() or restoreBackup() on transient NV error"
+      ],
+      "upstream_root_cause": "Host AdapterNvMemory.retry() contains an unreachable throw condition inside its retry loop, returning undefined after 3 failed NVRAM SREQ attempts instead of surfacing the error.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by responding deterministically to all MT NVRAM read and write commands so the initial request succeeds without triggering host retries."
+    },
+    {
+      "id": "ZH-NPI-005",
+      "vendor": "zigbee-herdsman",
+      "layer": "UART-NPI",
+      "title": "Strict SRSP-before-AREQ wire ordering across all synchronous MT request subsystems",
+      "classification": "upstream-firmware-or-host-bug",
+      "policy": "strict-spec",
+      "spec_citations": [
+        "TI Z-Stack Monitor and Test (MT) API (SWRA198) §2.1 (SREQ -> SRSP -> AREQ Ordering)"
+      ],
+      "mt_commands": [
+        "0x24 0x01",
+        "0x25 0x02",
+        "0x25 0x31"
+      ],
+      "nv_items": [],
+      "status_codes": [],
+      "log_signatures": [
+        "AREQ arrives before SRSP in Waitress causing 10000ms confirmation timeout",
+        "Stale SREQ response after 6000ms AsyncMutex release desynchronizes next SREQ"
+      ],
+      "upstream_root_cause": "If the coordinator emits a causal AREQ (such as an immediate local ZDO response or AF_DATA_CONFIRM) before the SREQ's SRSP has been processed by the host to register its waiter, the host misses the AREQ and times out.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by enforcing strict SRSP-before-AREQ wire ordering across all MT subsystems."
+    },
+    {
+      "id": "ZH-NPI-006",
+      "vendor": "zigbee-herdsman",
+      "layer": "UART-NPI",
+      "title": "Strict MT frame length bounding (<= 250 bytes) and XOR FCS integrity on host UART streams",
+      "classification": "upstream-firmware-or-host-bug",
+      "policy": "strict-spec",
+      "spec_citations": [
+        "TI Z-Stack Monitor and Test (MT) API (SWRA198) §2.2 (UNPI Frame Length <= 250 B & XOR FCS)"
+      ],
+      "mt_commands": [
+        "0x41 0x80",
+        "0x44 0x81"
+      ],
+      "nv_items": [],
+      "status_codes": [],
+      "log_signatures": [
+        "zh:zstack:unpi:parser: Invalid UNPI checksum / dataLength > 250 discards buffered frames",
+        "UNPI parser slice discard drops trailing SRSP or AREQ frames"
+      ],
+      "upstream_root_cause": "In the host UNPI parser, if a candidate 0xFE byte is followed by length > 250 or fails XOR FCS verification, the parser discards the buffered chunk and can drop valid trailing MT frames.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by bounding all outbound MT payloads to <= 250 bytes with valid XOR FCS and performing byte-accurate 0xFE resynchronization on ingress."
+    },
+    {
+      "id": "ZH-NPI-007",
+      "vendor": "zigbee-herdsman",
+      "layer": "UART-NPI",
+      "title": "Subsystem-matched SRSP responses across SYS, AF, ZDO, UTIL, and APP_CNF commands",
+      "classification": "upstream-firmware-or-host-bug",
+      "policy": "compat-shim",
+      "spec_citations": [
+        "TI Z-Stack Monitor and Test (MT) API (SWRA198) §2.3 (MT_RPC_SYS_RES0 0x60 0x00 Error SRSP)"
+      ],
+      "mt_commands": [
+        "0x60 0x00"
+      ],
+      "nv_items": [],
+      "status_codes": [
+        "0x01",
+        "0x02"
+      ],
+      "log_signatures": [
+        "Unhandled MT_RPC_ERROR (0x60 0x00) causes 6000ms SREQ timeout in zigbee-herdsman",
+        "SRSP - <subsystem> - <command> after 6000ms when coordinator returns 0x60 0x00"
+      ],
+      "upstream_root_cause": "Host SREQ handling waits exclusively for a subsystem-matched SRSP (cmd0 = req_cmd0 | 0x40, cmd1 = req_cmd1) and does not match MT_RPC_ERROR (0x60 0x00), stalling for 6000 ms if 0x60 0x00 is returned for an unsupported command.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by returning subsystem-matched SRSP responses across all SYS, AF, ZDO, UTIL, and APP_CNF commands used by zigbee-herdsman and zigpy-znp."
+    },
+    {
+      "id": "ZH-NPI-008",
+      "vendor": "zigbee-herdsman",
+      "layer": "UART-NPI",
+      "title": "Default AF/ZDO/APP_CNF AREQ callback activation and MT_UTIL_CALLBACK_SUB_CMD (0x27 0x06) support",
+      "classification": "upstream-firmware-or-host-bug",
+      "policy": "compat-shim",
+      "spec_citations": [
+        "TI Z-Stack Monitor and Test (MT) API (SWRA198) §3.10.1.6 (MT_UTIL_CALLBACK_SUB_CMD 0x27 0x06)"
+      ],
+      "mt_commands": [
+        "0x27 0x06"
+      ],
+      "nv_items": [],
+      "status_codes": [
+        "0x00"
+      ],
+      "log_signatures": [
+        "MT_UTIL_CALLBACK_SUB_CMD (0x27 0x06) required by zigpy-znp vs omitted by zigbee-herdsman",
+        "Missing ZDO/AF AREQ callbacks if subsystem bitmask defaults to disabled at boot"
+      ],
+      "upstream_root_cause": "zigbee-herdsman expects AF and ZDO AREQ indications to be enabled by default at boot without calling MT_UTIL_CALLBACK_SUB_CMD (0x27 0x06), whereas zigpy-znp explicitly sends 0x27 0x06 during initialization.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by enabling standard AF, ZDO, and APP_CNF AREQ callbacks by default at boot while acknowledging MT_UTIL_CALLBACK_SUB_CMD (0x27 0x06) with ZSuccess (0x00)."
+    },
+    {
+      "id": "ZH-NWK-001",
+      "vendor": "zigbee-herdsman",
+      "layer": "NWK",
+      "title": "Monotonic outgoing NWK and APS security frame-counter preservation across backup restores",
+      "classification": "upstream-firmware-or-host-bug",
+      "policy": "compat-shim",
+      "spec_citations": [
+        "Zigbee PRO R22/R23 §4.3.1.2 & §4.6.3.4 (Outgoing NWK & APS Security Frame Counter Non-Volatile Persistence)"
+      ],
+      "mt_commands": [
+        "0x21 0x09",
+        "0x21 0x1D",
+        "0x21 0x34"
+      ],
+      "nv_items": [
+        "0x0004",
+        "0x0006",
+        "0x0007",
+        "0x0075"
+      ],
+      "status_codes": [],
+      "log_signatures": [
+        "Mesh-wide coordinator deafness after restoring stale coordinator_backup.json",
+        "Routers drop coordinator frames as replay attacks after unclean shutdown + restoreBackup()"
+      ],
+      "upstream_root_cause": "When restoring an older on-disk coordinator_backup.json after an unclean host shutdown, the restored NWK frame counter can lag behind the live frame counter already recorded by mesh routers, causing routers to drop coordinator frames.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by preventing outgoing NWK and APS security frame counters from regressing across backup restores within the same network key epoch."
+    },
+    {
+      "id": "ZH-NWK-002",
+      "vendor": "zigbee-herdsman",
+      "layer": "NWK",
+      "title": "Live outgoing NWK and APS security frame-counter reporting on NVRAM backup reads",
+      "classification": "upstream-firmware-or-host-bug",
+      "policy": "compat-shim",
+      "spec_citations": [
+        "Zigbee PRO R22/R23 §4.3.1.2 (NWK Security Frame Counter Monotonicity Across Restarts)"
+      ],
+      "mt_commands": [
+        "0x21 0x08",
+        "0x21 0x09",
+        "0x21 0x1C",
+        "0x21 0x1D",
+        "0x21 0x33",
+        "0x21 0x34"
+      ],
+      "nv_items": [
+        "0x0004",
+        "0x0006",
+        "0x0007",
+        "0x0075"
+      ],
+      "status_codes": [],
+      "log_signatures": [
+        "createBackup() exports stale NWK frameCounter from flash checkpoint",
+        "Repeated restarts without post-restore backup flush cause frame counter regression"
+      ],
+      "upstream_root_cause": "Legacy coordinator firmware checkpoints outgoing NWK security frame counters to ZCD_NV_EX_NWK_SEC_MATERIAL_TABLE (0x0007) only in periodic step intervals, so host createBackup() reads can export a lagging counter value.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by returning the current outgoing NWK and APS security frame counters on all host NVRAM reads of 0x0007, 0x0075, 0x0004, and 0x0006."
+    },
+    {
+      "id": "ZH-NWK-003",
+      "vendor": "zigbee-herdsman",
+      "layer": "NWK",
+      "title": "Post-restore ZDO_EXT_ROUTE_DISC (0x25 0x45) and ZDO_NWK_ADDR_REQ (0x25 0x00) discovery burst handling",
+      "classification": "upstream-firmware-or-host-bug",
+      "policy": "compat-shim",
+      "spec_citations": [
+        "Zigbee PRO R22 §3.6.3.5.2 & §3.6.5 / R23 §3.6.4.5.1 & §3.6.6 (Concentrator Route Discovery & Broadcast Transaction Table)"
+      ],
+      "mt_commands": [
+        "0x25 0x00",
+        "0x25 0x45",
+        "0x24 0x01"
+      ],
+      "nv_items": [],
+      "status_codes": [
+        "0xC7",
+        "0xCD"
+      ],
+      "log_signatures": [
+        "Post-restore broadcast storm of ZDO_EXT_ROUTE_DISC (0x25 0x45) and ZDO_NWK_ADDR_REQ (0x25 0x00)",
+        "SREQ/AREQ fails with 0xC7 (NWK_TABLE_FULL) during post-restore startup"
+      ],
+      "upstream_root_cause": "After a cold backup restore before multi-hop routes are re-learned, the host adapter issues concurrent ZDO_EXT_ROUTE_DISC (0x25 0x45) and broadcast ZDO_NWK_ADDR_REQ (0x25 0x00) requests that saturate legacy Broadcast Transaction Tables with 0xC7.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by handling post-restore ZDO_EXT_ROUTE_DISC (0x25 0x45) and ZDO_NWK_ADDR_REQ (0x25 0x00) discovery bursts without returning 0xC7 (NWK_TABLE_FULL)."
+    },
+    {
+      "id": "ZH-NWK-004",
+      "vendor": "zigbee-herdsman",
+      "layer": "NWK",
+      "title": "Unaddressed short-address sentinel normalization in ZCD_NV_EX_ADDRMGR (0x0001) during backup restore",
+      "classification": "upstream-firmware-or-host-bug",
+      "policy": "compat-shim",
+      "spec_citations": [
+        "TI Z-Stack Extended NVRAM Specification (ZCD_NV_EX_ADDRMGR 0x0001 Unaddressed Short-Address Sentinel)"
+      ],
+      "mt_commands": [
+        "0x21 0x1C",
+        "0x21 0x1D",
+        "0x21 0x33",
+        "0x21 0x34",
+        "0x27 0x40",
+        "0x27 0x41"
+      ],
+      "nv_items": [
+        "0x0001"
+      ],
+      "status_codes": [
+        "0xC2"
+      ],
+      "log_signatures": [
+        "Unaddressed ZCD_NV_EX_ADDRMGR (0x0001) slot exported with unjoined short address",
+        "restoreBackup() writes null networkAddress sentinel into ZCD_NV_EX_ADDRMGR nwkAddr field"
+      ],
+      "upstream_root_cause": "Host backup and restore logic uses different sentinel values for unaddressed nodes when exporting and restoring ZCD_NV_EX_ADDRMGR (0x0001), which can trigger unintended broadcasts on legacy firmware (TI-AF-003).",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by treating all reserved unaddressed short-address sentinels in ZCD_NV_EX_ADDRMGR (0x0001) consistently and blocking unicast TX until the node joins."
+    },
+    {
+      "id": "ZH-ZDO-001",
+      "vendor": "zigbee-herdsman",
+      "layer": "ZDO",
+      "title": "Child association state preservation when restoring ZCD_NV_EX_ADDRMGR (0x0001) without 0x0003",
+      "classification": "upstream-firmware-or-host-bug",
+      "policy": "compat-shim",
+      "spec_citations": [
+        "Zigbee PRO R22/R23 §3.6.1 (Neighbor / Associated Device Table)"
+      ],
+      "mt_commands": [
+        "0x21 0x1D",
+        "0x21 0x34"
+      ],
+      "nv_items": [
+        "0x0001",
+        "0x0003"
+      ],
+      "status_codes": [
+        "0xCD",
+        "0xE9",
+        "0xF0"
+      ],
+      "log_signatures": [
+        "restoreBackup() writes ZCD_NV_EX_ADDRMGR (0x0001) without ZCD_NV_EX_ASSOC_TABLE (0x0003)",
+        "Restored direct children missing from coordinator association table after backup restore"
+      ],
+      "upstream_root_cause": "Host restoreBackup() writes associated-device flags into ZCD_NV_EX_ADDRMGR (0x0001) for all devices in coordinator_backup.json without writing ZCD_NV_EX_ASSOC_TABLE (0x0003), leaving the child association table empty on legacy firmware.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by preserving child association state when ZCD_NV_EX_ADDRMGR (0x0001) is restored even if ZCD_NV_EX_ASSOC_TABLE (0x0003) is omitted."
+    },
+    {
+      "id": "ZH-ZDO-002",
+      "vendor": "zigbee-herdsman",
+      "layer": "ZDO",
+      "title": "Direct NVRAM backup restore support without requiring throwaway over-the-air network formation",
+      "classification": "normative-spec-violation",
+      "policy": "compat-shim",
+      "spec_citations": [
+        "Zigbee BDB 16-02828-012 §8.2 (Network Formation)"
+      ],
+      "mt_commands": [
+        "0x2F 0x05",
+        "0x21 0x09",
+        "0x27 0x00"
+      ],
+      "nv_items": [
+        "0x0021"
+      ],
+      "status_codes": [],
+      "log_signatures": [
+        "beginRestore() calls APP_CNF.bdbStartCommissioning(2) on random channel before restoreBackup()",
+        "Restore startup delay while polling ZCD_NV_NIB (0x0021) during temporary network formation"
+      ],
+      "upstream_root_cause": "During backup restore, the host forms a temporary network via APP_CNF_BDB_START_COMMISSIONING (0x2F 0x05) and polls ZCD_NV_NIB (0x0021) before overwriting NIB and all NVRAM tables via restoreBackup().",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by supporting both legacy commissioning-then-restore sequences and direct NVRAM backup restoration."
+    },
+    {
+      "id": "ZH-ZDO-003",
+      "vendor": "zigbee-herdsman",
+      "layer": "ZDO",
+      "title": "Record-count and payload-length bounding on ZDO_MGMT_LQI_RSP (0x45 0xB1) and ZDO_MGMT_RTG_RSP (0x45 0xB2)",
+      "classification": "upstream-firmware-or-host-bug",
+      "policy": "compat-shim",
+      "spec_citations": [
+        "Zigbee PRO R22/R23 §2.4.4.3.2 (Mgmt_Lqi_rsp) & §2.4.4.3.3 (Mgmt_Rtg_rsp)",
+        "TI MT API §3.12.2.20–21"
+      ],
+      "mt_commands": [
+        "0x25 0x31",
+        "0x45 0xB1",
+        "0x25 0x32",
+        "0x45 0xB2"
+      ],
+      "nv_items": [],
+      "status_codes": [],
+      "log_signatures": [
+        "RangeError: Attempt to access memory outside buffer bounds in BuffaloZdo.readLQITableResponse",
+        "Network map scan crashes UnpiParser on truncated Mgmt_Lqi_rsp (0x45 0xB1) or Mgmt_Rtg_rsp (0x45 0xB2)"
+      ],
+      "upstream_root_cause": "Host ZDO response parsers loop entryCount times reading neighbor or routing records without checking remaining buffer bytes, throwing an uncaught RangeError if entryCount exceeds the bytes present in the frame.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by bounding ZDO_MGMT_LQI_RSP (0x45 0xB1) and ZDO_MGMT_RTG_RSP (0x45 0xB2) record counts to match the complete records present in the MT frame."
+    },
+    {
+      "id": "ZH-ZDO-004",
+      "vendor": "zigbee-herdsman",
+      "layer": "ZDO",
+      "title": "Post-restore device rejoin and role recovery when MAC CapabilityInformation is omitted from backup",
+      "classification": "upstream-firmware-or-host-bug",
+      "policy": "compat-shim",
+      "spec_citations": [
+        "Zigbee PRO R22 §3.6.1.4.3 / R23 §3.6.1.6.1 & §4.6.3.3 (CapabilityInformation on Rejoin) & IEEE 802.15.4-2020 §6.7.3"
+      ],
+      "mt_commands": [
+        "0x21 0x1C",
+        "0x21 0x1D",
+        "0x21 0x33",
+        "0x21 0x34",
+        "0x24 0x01"
+      ],
+      "nv_items": [
+        "0x0001",
+        "0x0003"
+      ],
+      "status_codes": [
+        "0xCD",
+        "0xE9",
+        "0xF0"
+      ],
+      "log_signatures": [
+        "Post-restore downlink to router or sleepy child before role is re-learned from air traffic",
+        "Restored child NWK Rejoin after backup restore lacks prior CapabilityInformation in NVRAM"
+      ],
+      "upstream_root_cause": "Neither open-coordinator-backup v1 JSON nor ZCD_NV_EX_ADDRMGR (0x0001) stores a device's 8-bit MAC CapabilityInformation (FFD vs RFD, RxOnWhenIdle), leaving restored node roles unspecified until air traffic is received.",
+      "public_resolution": "Resolved in SMLIGHT ZeroStack by seamlessly recovering router and sleepy-child roles on post-restore NWK Rejoin, Device_annce (0x0013), or MAC Data Request (0x04) traffic."
+    }
+  ]
+}

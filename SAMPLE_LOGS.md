@@ -2,13 +2,13 @@
 
 Use these realistic Zigbee2MQTT (`z2m`) and Home Assistant ZHA logs to test the **ZeroStack RF Diagnostics MCP Server (`zerostack-mcp`)** (`https://github.com/zerostack-rf/zerostack-mcp`) or the **ZeroStack Interactive Web Log Analyzer** (`https://smlight-tech.github.io/zerostack/`).
 
-> **ZeroStack Official Overview & Firmware (`Release Zero (0.9.9-beta.1)`)**: [https://smlight.tech/software/zerostack](https://smlight.tech/software/zerostack)
+> **ZeroStack Official Overview & Firmware (`Release Zero`)**: [https://smlight.tech/software/zerostack](https://smlight.tech/software/zerostack)
 
 ---
 
 ## Prompt 1: Tuya Smart Plug Telemetry Flood + `6000ms` SRSP Timeout (`SLZB-06` / `CC2652P`)
 
-> **"My Zigbee2MQTT network on an SLZB-06 (CC2652P) keeps freezing every evening when my Tuya smart plugs are active, and then crashes with `SRSP - AF - dataRequest after 6000ms`. Use `analyze_zigbee_thread_log` and `get_zerostack_benchmarks` to explain what is happening on the silicon and how ZeroStack Release Zero (`0.9.9-beta.1`) fixes it:"**
+> **"My Zigbee2MQTT network on an SLZB-06 (CC2652P) keeps freezing every evening when my Tuya smart plugs are active, and then crashes with `SRSP - AF - dataRequest after 6000ms`. Use `analyze_zigbee_thread_log` and `get_zerostack_benchmarks` to explain what is happening on the silicon and how ZeroStack Release Zero fixes it:"**
 
 ```text
 info  2026-03-29 14:21:01: MQTT publish: topic 'zigbee2mqtt/living_room_plug_1', payload '{"current":0.42,"energy":12.4,"power":96,"voltage":231}'

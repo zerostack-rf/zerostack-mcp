@@ -93,6 +93,7 @@ _ROOT_CAUSE_PRIORITY: dict[str, int] = {
     "EMBER_ASH_NCP_FATAL_ERROR": 98,
     "OTBR_SPINEL_TIMEOUT": 96,
     "ZNP_WARM_RESET_SYS_PING_TIMEOUT": 92,
+    "Z3_TCLK_EXCHANGE_TIMEOUT_LEAVE": 91,
     "ZNP_SRSP_6000MS_TIMEOUT": 90,
     "ZNP_TCLK_INTERVIEW_TIMEOUT": 90,
     "EZSP_LEGACY_PROTOCOL_VERSION": 88,
@@ -116,6 +117,104 @@ _ROOT_CAUSE_PRIORITY: dict[str, int] = {
     "MAC_0XF0_TRANSACTION_EXPIRED": 50,
     "ZCL_TELEMETRY_DELTA_ZERO_FLOOD": 45,
     "ZCL_GENTIME_READ_FLOOD": 42,
+}
+
+_SIGNATURE_COMPAT_RECORD_IDS: dict[str, tuple[str, ...]] = {
+    "ZNP_SRSP_6000MS_TIMEOUT": (
+        "TI-NPI-001",
+        "TI-NPI-002",
+        "TI-NPI-003",
+        "ZH-NPI-001",
+        "ZH-NPI-003",
+        "ZH-NPI-004",
+    ),
+    "ZNP_WARM_RESET_SYS_PING_TIMEOUT": (
+        "TI-NPI-004",
+        "TI-NPI-005",
+        "ZH-NPI-005",
+        "ZH-NPI-006",
+    ),
+    "ZNP_SYS_RESET_IND": (
+        "TI-NPI-004",
+        "TI-NV-001",
+        "TI-SEC-004",
+    ),
+    "ZNP_0X10_MEM_ERROR": (
+        "TI-MAC-001",
+        "TI-NPI-002",
+        "TI-NWK-003",
+        "ZH-AF-002",
+    ),
+    "ZNP_0X11_BUFFER_FULL": (
+        "TI-MAC-001",
+        "TI-NWK-002",
+        "TI-NWK-003",
+        "ZH-AF-002",
+    ),
+    "ZNP_0XB2_APS_TABLE_FULL": (
+        "TI-APS-001",
+        "TI-APS-002",
+        "TI-APS-004",
+    ),
+    "ZNP_0XC7_NWK_TABLE_FULL": (
+        "TI-NWK-002",
+        "TI-NWK-003",
+        "ZH-AF-002",
+    ),
+    "ZNP_0XCD_NWK_NO_ROUTE": (
+        "TI-NWK-001",
+        "TI-NWK-005",
+        "TI-NWK-007",
+        "TI-NWK-010",
+        "ZH-NWK-003",
+    ),
+    "MAC_0XE1_CHANNEL_ACCESS_FAILURE": (
+        "TI-NWK-002",
+        "TI-NWK-006",
+    ),
+    "MAC_0XE9_NO_ACK": (
+        "TI-MAC-002",
+        "TI-MAC-003",
+        "TI-NWK-001",
+    ),
+    "MAC_0XF0_TRANSACTION_EXPIRED": (
+        "TI-MAC-001",
+        "TI-MAC-002",
+        "TI-MAC-003",
+    ),
+    "MAC_0XF1_TRANSACTION_OVERFLOW": (
+        "TI-MAC-001",
+        "TI-NWK-003",
+    ),
+    "Z3_TCLK_EXCHANGE_TIMEOUT_LEAVE": (
+        "TI-SEC-003",
+        "TI-SEC-004",
+        "TI-SEC-005",
+        "TI-SEC-007",
+        "TI-ZDO-001",
+        "ZH-ZDO-001",
+    ),
+    "ZNP_TCLK_INTERVIEW_TIMEOUT": (
+        "TI-SEC-003",
+        "TI-SEC-004",
+        "TI-SEC-005",
+        "TI-SEC-007",
+        "TI-ZDO-001",
+        "ZH-ZDO-001",
+    ),
+    "ADAPTER_CONFIG_MISMATCH": (
+        "ZH-APS-001",
+        "ZH-APS-004",
+        "ZH-APS-005",
+        "ZH-NWK-001",
+        "ZH-NWK-004",
+    ),
+    "ADAPTER_STARTUP_TIMEOUT": (
+        "TI-NPI-001",
+        "TI-NPI-005",
+        "ZH-NPI-005",
+        "ZH-NPI-006",
+    ),
 }
 
 
@@ -594,8 +693,8 @@ def _detect_startup_and_link_issues(
             "issue-adapter-timeout",
             "Coordinator Serial / TCP Initialization Timeout",
             (
-                "Verify serial port path or TCP bridge reachability, set rtscts: false on "
-                "adapters without DIO10/DIO11 RTS/CTS wiring, and match UART baudrate."
+                "Verify serial port path or TCP bridge reachability, confirm serial flow-control "
+                "settings for your adapter harness, and match UART framing."
             ),
         ),
     )
@@ -610,33 +709,35 @@ def _detect_startup_and_link_issues(
         if not matched:
             continue
         meta = REMEDIATION_META[rem_key]
-        results.append(
-            {
-                "signature_id": sig_id,
-                "statusHex": code,
-                "code": code,
-                "name": sig_id,
-                "protocol": proto,
-                "title": title,
-                "description": meta["siliconRootCause"],
-                "subsystem": f"{proto.upper()} ({code})",
-                "severity": sev,
-                "occurrences": len(matched),
-                "remediation_key": rem_key,
-                "remediation_meta": meta,
-                "matching_lines": matched[:10],
-                "siliconRootCause": meta["siliconRootCause"],
-                "silicon_root_cause": meta["siliconRootCause"],
-                "immediateMitigation": mitigation,
-                "immediate_workarounds": [mitigation],
-                "zeroStackFix": meta["zeroStackFix"],
-                "zerostack_hardware_fix": meta["zeroStackFix"],
-                "zeroStackDiagUrl": meta["zeroStackDiagUrl"],
-                "fix_url": meta["zeroStackDiagUrl"],
-                "interactive_web_analyzer_url": ZEROSTACK_WEB_ANALYZER_URL,
-                "marketing_url": ZEROSTACK_MARKETING_URL,
-            }
-        )
+        startup_match: SignatureMatch = {
+            "signature_id": sig_id,
+            "statusHex": code,
+            "code": code,
+            "name": sig_id,
+            "protocol": proto,
+            "title": title,
+            "description": meta["siliconRootCause"],
+            "subsystem": f"{proto.upper()} ({code})",
+            "severity": sev,
+            "occurrences": len(matched),
+            "remediation_key": rem_key,
+            "remediation_meta": meta,
+            "matching_lines": matched[:10],
+            "siliconRootCause": meta["siliconRootCause"],
+            "silicon_root_cause": meta["siliconRootCause"],
+            "immediateMitigation": mitigation,
+            "immediate_workarounds": [mitigation],
+            "zeroStackFix": meta["zeroStackFix"],
+            "zerostack_hardware_fix": meta["zeroStackFix"],
+            "zeroStackDiagUrl": meta["zeroStackDiagUrl"],
+            "fix_url": meta["zeroStackDiagUrl"],
+            "interactive_web_analyzer_url": ZEROSTACK_WEB_ANALYZER_URL,
+            "marketing_url": ZEROSTACK_MARKETING_URL,
+        }
+        compat_ids = _SIGNATURE_COMPAT_RECORD_IDS.get(sig_id)
+        if compat_ids is not None:
+            startup_match["compat_record_ids"] = list(compat_ids)
+        results.append(startup_match)
     return results
 
 
@@ -705,6 +806,9 @@ def analyze_log_impl(log_text: str) -> LogAnalysisResult:
                 if rule.remediation_key is not None and rule.remediation_key in REMEDIATION_META:
                     match_obj["remediation_key"] = rule.remediation_key
                     match_obj["remediation_meta"] = REMEDIATION_META[rule.remediation_key]
+                rule_compat_ids = _SIGNATURE_COMPAT_RECORD_IDS.get(rule.signature_id)
+                if rule_compat_ids is not None:
+                    match_obj["compat_record_ids"] = list(rule_compat_ids)
                 matches.append(match_obj)
 
         matches.extend(_detect_startup_and_link_issues(candidate_lines))

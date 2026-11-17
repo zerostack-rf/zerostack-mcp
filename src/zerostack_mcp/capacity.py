@@ -1,7 +1,7 @@
 # Copyright (c) 2026 SMLIGHT
 # SPDX-License-Identifier: Apache-2.0
 
-"""Coordinator hardware SrcMatch, indirect poll quota, and SRAM headroom calculator."""
+"""Coordinator IEEE 802.15.4 indirect poll queue and SRAM headroom calculator."""
 
 from __future__ import annotations
 
@@ -49,10 +49,11 @@ def check_coordinator_capacity_impl(
             "sleepy_zed_count": sleepy_zed_count,
             "router_count": device_count - sleepy_zed_count,
             "zerostack_support_status": (
-                f"SMLIGHT ZeroStack {ZEROSTACK_RELEASE_NAME} currently ships on SMLIGHT TI "
-                "SimpleLink F2 coordinators (SLZB-06, SLZB-06U, SLZB-06P7, SLZB-06P7U, "
-                "SLZB-06P7v1, SLZB-07P7, SLZB-06P10, SLZB-07P10). EFR32 support is in active "
-                f"development ({ZEROSTACK_MARKETING_URL})."
+                f"SMLIGHT ZeroStack ({ZEROSTACK_RELEASE_NAME}) currently ships on SMLIGHT TI "
+                "SimpleLink F2 coordinators (incl. U variants): CC2652P (SLZB-06, SLZB-MR2), "
+                "CC2652P7/CC1352P7 (SLZB-06P7, SLZB-07P7, SLZB-MR1), and CC2674P10 (SLZB-06P10, "
+                "SLZB-07P10, SLZB-MR3, SLZB-MR4, SLZB-MRW10, SLZB-Ultima). EFR32 support is in "
+                f"active development ({ZEROSTACK_MARKETING_URL})."
             ),
             "srcmatch_hardware_table": {
                 "max_short_slots": max_slots,
@@ -98,37 +99,46 @@ def check_coordinator_capacity_impl(
     hw_short_slots = 32
     hw_ext_slots = 32
     hw_mixed_short_slots = 32
-    indirect_pool_cap_pct = 50
-    max_queued_per_child = 2
 
-    if "2674" in chip_upper or "P10" in chip_upper:
+    if (
+        "2674" in chip_upper
+        or "P10" in chip_upper
+        or "MR3" in chip_upper
+        or "MR4" in chip_upper
+        or "MRW10" in chip_upper
+        or "ULTIMA" in chip_upper
+    ):
         sram_kb = 256
         flash_kb = 1024
-        max_routes = 300
-        model_name = (
-            "SLZB-07P10 (TI CC2674P10 SimpleLink F2)"
-            if "07P10" in chip_upper
-            else "SLZB-06P10 (TI CC2674P10 SimpleLink F2)"
-        )
-    elif "2652P7" in chip_upper or "1352" in chip_upper or "P7" in chip_upper:
+        if "ULTIMA" in chip_upper:
+            model_name = "SLZB-Ultima (TI CC2674P10 SimpleLink F2)"
+        elif "MRW10" in chip_upper:
+            model_name = "SLZB-MRW10 (TI CC2674P10 SimpleLink F2)"
+        elif "MR4" in chip_upper:
+            model_name = "SLZB-MR4 (TI CC2674P10 SimpleLink F2)"
+        elif "MR3" in chip_upper:
+            model_name = "SLZB-MR3 (TI CC2674P10 SimpleLink F2)"
+        elif "07P10" in chip_upper:
+            model_name = "SLZB-07P10 (TI CC2674P10 SimpleLink F2)"
+        else:
+            model_name = "SLZB-06P10 (TI CC2674P10 SimpleLink F2)"
+    elif (
+        "2652P7" in chip_upper or "1352" in chip_upper or "P7" in chip_upper or "MR1" in chip_upper
+    ):
         sram_kb = 144
         flash_kb = 704
-        max_routes = 250
         if "07P7" in chip_upper:
             model_name = "SLZB-07P7 (TI CC2652P7 SimpleLink F2)"
-        elif "P7U" in chip_upper:
-            model_name = "SLZB-06P7U (TI CC2652P7 / CC1352P7 SimpleLink F2)"
-        elif "P7V1" in chip_upper:
-            model_name = "SLZB-06P7v1 (TI CC2652P7 / CC1352P7 SimpleLink F2)"
+        elif "MR1" in chip_upper:
+            model_name = "SLZB-MR1 (TI CC2652P7 / CC1352P7 SimpleLink F2)"
         else:
             model_name = "SLZB-06P7 (TI CC2652P7 / CC1352P7 SimpleLink F2)"
     else:
         sram_kb = 88
         flash_kb = 352
-        max_routes = 200
         model_name = (
-            "SLZB-06U (TI CC2652P SimpleLink F2)"
-            if "06U" in chip_upper
+            "SLZB-MR2 (TI CC2652P SimpleLink F2)"
+            if "MR2" in chip_upper
             else "SLZB-06 (TI CC2652P SimpleLink F2)"
         )
 
@@ -140,43 +150,43 @@ def check_coordinator_capacity_impl(
     if sleepy_zed_count > 32:
         stock_status = "CRITICAL_SLEEPY_DROPS_0XE9"
         stock_behavior = (
-            f"At {sleepy_zed_count} direct sleepy ZEDs (>32 F2 RFC_RAM hardware SrcMatch slots), "
-            "stock Z-Stack promotes to pendAll mode while suffering 11.11 ms per-frame flash "
-            "security stalls that miss ZED RX poll windows (0xe9: MAC_NO_ACK) and letting "
-            "sleeping children hoard nearly 100% of the nwkDB buffer pool (0x11: BUFFER_FULL)."
+            f"At {sleepy_zed_count} direct sleepy ZEDs, legacy coordinator firmware promotes "
+            "IEEE 802.15.4 ACKs to pending-all mode while 11.11 ms per-frame flash security "
+            "stalls miss ZED RX poll windows (0xe9: MAC_NO_ACK) and unisolated indirect "
+            "frame queues exhaust shared packet buffers (0x11: BUFFER_FULL)."
         )
         diag_url = f"{ZEROSTACK_DIAGNOSTICS_BASE}/mac-no-ack-0xe9-sleepy-aqara-tuya-child-drops.md"
     elif device_count > 100:
         stock_status = "HIGH_HEAP_FRAGMENTATION_RISK_0X10"
         stock_behavior = (
-            f"At {device_count} total nodes, stock first-fit O(N) OSAL_Memory heap (2,550 cycles "
-            "at 64 holes) is prone to external fragmentation cliffs (0x10: MEM_ERROR) and 22.19 ms "
-            "per-hop flash security stalls (~45 routed pkt/s ceiling)."
+            f"At {device_count} total nodes, legacy first-fit O(N) variable-block heap allocation "
+            "(2,550 cycles at 64 holes) is prone to external fragmentation cliffs "
+            "(0x10: MEM_ERROR) and 22.19 ms per-hop flash security stalls "
+            "(~45 routed pkt/s ceiling)."
         )
         diag_slug = "znp-0x10-mem-error-0x11-buffer-full-0xc7-nwk-table-full.md"
         diag_url = f"{ZEROSTACK_DIAGNOSTICS_BASE}/{diag_slug}"
     else:
         stock_status = "WITHIN_STOCK_LIMITS"
         stock_behavior = (
-            f"{sleepy_zed_count} sleepy ZEDs fit within the 32-slot hardware SrcMatch table, "
-            "though O(N) OSAL heap fragmentation, unisolated indirect buffer hoarding, and "
+            f"{sleepy_zed_count} sleepy ZEDs fit within standard hardware source-matching "
+            "capacity, though O(N) heap fragmentation, unisolated indirect buffer queuing, and "
             "O(N*P) flash security walks remain a long-uptime risk."
         )
         diag_url = f"{ZEROSTACK_DIAGNOSTICS_BASE}/mac-no-ack-0xe9-sleepy-aqara-tuya-child-drops.md"
 
     if not pend_all_active:
         zerostack_pend_all_behavior = (
-            f"EXACT_HARDWARE_SRCMATCH ({short_slots_used}/{hw_short_slots} short slots occupied): "
-            "Matched in the F2 Cortex-M0 CPE 32-slot RFC_RAM hardware table; ZeroStack eliminates "
-            "flash-read stalls during sleepy poll windows (82.7 us NWK encrypt, 0 flash reads) "
-            "and enforces indirect queue quota isolation (50% pool cap, max 2 frames/child)."
+            f"EXACT_HARDWARE_MATCH ({short_slots_used}/{hw_short_slots} short slots occupied): "
+            "Matched in hardware source-matching slots; ZeroStack eliminates flash-read stalls "
+            "during sleepy poll windows (82.7 us NWK encrypt, 0 flash reads) and enforces "
+            "bounded per-child indirect frame queuing."
         )
     else:
         zerostack_pend_all_behavior = (
-            f"PENDALL_WITH_QUOTA_ISOLATION ({sleepy_zed_count} sleepy ZEDs > "
-            f"{hw_short_slots} HW slots): ZeroStack pairs the F2 hardware SrcMatch table with "
-            "strict indirect queue quota isolation (50% pool cap, max 2 queued frames per "
-            "sleeping child) and zero flash-read stalls during sleepy poll windows (82.7 us NWK "
+            f"EXTENDED_SLEEPY_CHILD_LOAD ({sleepy_zed_count} sleepy ZEDs > "
+            f"{hw_short_slots} HW slots): ZeroStack enforces bounded per-child indirect frame "
+            "queuing and zero flash-read stalls during sleepy poll windows (82.7 us NWK "
             "encrypt, 6.8 us TCLK lookup, 0 flash reads); recommend routing excess sleepy ZEDs "
             "through mains-powered Zigbee routers."
         )
@@ -206,17 +216,15 @@ def check_coordinator_capacity_impl(
             "total_sram_kb": sram_kb,
             "total_flash_kb": flash_kb,
             "stock_allocator": (
-                "First-fit O(N) variable-block OSAL_Memory (2,550 cycles at 64 holes; prone to "
+                "First-fit O(N) variable-block heap allocator (2,550 cycles at 64 holes; prone to "
                 "0x10: MEM_ERROR fragmentation)"
             ),
             "zerostack_allocator": (
                 f"Constant-time O(1) memory manager (218 cycles at 64 holes, 11.7x faster, "
-                f"Delta-heap = 0 B across {sram_kb} KB SRAM, {max_routes}+ source routes)"
+                f"Delta-heap = 0 B across {sram_kb} KB SRAM)"
             ),
             "stock_status": stock_status,
             "zerostack_status": "HEALTHY_DETERMINISTIC",
-            "indirect_queue_pool_cap_pct": indirect_pool_cap_pct,
-            "max_indirect_frames_per_child": max_queued_per_child,
         },
         "zeroStackDiagUrl": diag_url,
         "documentation_url": diag_url,

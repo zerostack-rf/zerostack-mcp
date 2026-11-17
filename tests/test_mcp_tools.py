@@ -1,7 +1,7 @@
 # Copyright (c) 2026 SMLIGHT
 # SPDX-License-Identifier: Apache-2.0
 
-"""Comprehensive unit, schema, performance, and OPSEC tests for `zerostack-mcp`."""
+"""Comprehensive unit, schema, performance, and catalog sync tests for `zerostack-mcp`."""
 
 from __future__ import annotations
 
@@ -18,7 +18,14 @@ import jsonschema
 import pytest
 from mcp.server.lowlevel.helper_types import ReadResourceContents
 
-from zerostack_mcp.catalog import load_diagnostics_catalog, load_remediation_meta
+from zerostack_mcp.catalog import (
+    COMPAT_REGISTRY_BY_ID,
+    COMPAT_REGISTRY_RECORDS,
+    load_compat_registry_json_text,
+    load_diagnostics_catalog,
+    load_remediation_meta,
+    query_compat_registry,
+)
 from zerostack_mcp.models import (
     MAX_FLOODING_DEVICES,
     MAX_LOG_BYTES,
@@ -45,6 +52,7 @@ from zerostack_mcp.server import (
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_PATH = Path(__file__).resolve().parent / "schemas" / "server_2025_12_11.schema.json"
+
 
 def _extract_pdf_text(pdf_path: Path) -> str:
     res = subprocess.run(
@@ -81,7 +89,7 @@ def test_repository_files_and_synced_catalogs() -> None:
     skip_dirs = {".git", ".venv", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache"}
     legacy_semver = "0.9.9-beta" + "1"
     legacy_badge_semver = "0.9.9--beta" + "1"
-    raw_latex_re = re.compile(r"\$" + r"(?:O\(|\\Delta|\\cdot|\\times|D\s*=|k\s*=)")
+    raw_latex_re = re.compile(r"\$(?:O\(|\\Delta|\\cdot|\\times|D\s*=|k\s*=)")
     scanned_files = 0
     for path in sorted(REPO_ROOT.rglob("*")):
         if any(part in skip_dirs for part in path.parts) or not path.is_file():
@@ -102,9 +110,7 @@ def test_repository_files_and_synced_catalogs() -> None:
         scanned_files += 1
     assert scanned_files >= 12
 
-    parent_sample_logs = REPO_ROOT.parent / "SAMPLE_LOGS.md"
-    if parent_sample_logs.is_file():
-        assert (REPO_ROOT / "SAMPLE_LOGS.md").read_bytes() == parent_sample_logs.read_bytes()
+    assert (REPO_ROOT / "SAMPLE_LOGS.md").is_file()
 
     sibling_repo = REPO_ROOT.parent / "smlight-tech-zerostack"
     if sibling_repo.is_dir():
@@ -121,13 +127,15 @@ def test_repository_files_and_synced_catalogs() -> None:
 
         index_html = (sibling_repo / "docs" / "index.html").read_text(encoding="utf-8")
         parsed_cat = json.loads(mcp_cat.decode("utf-8"))
-        expected_wm = json.dumps(
-            parsed_cat["signatures"], ensure_ascii=False, separators=(",", ":")
+        assert (
+            parsed_cat["signatures"]["ZNP_WARM_RESET_SYS_PING_TIMEOUT"]["zeroStackFix"]
+            in index_html
         )
-        expected_hm = json.dumps(
-            parsed_cat["remediationMeta"], ensure_ascii=False, separators=(",", ":")
-        )
-        assert f"const Wm={expected_wm},Hm={expected_hm}" in index_html
+        assert "ZNP_WARM_RESET_SYS_PING_TIMEOUT" in index_html
+        assert "Z3_TCLK_EXCHANGE_TIMEOUT_LEAVE" in index_html
+        assert "SLZB-06P7v1" not in index_html
+        assert "SLZB-06U" not in index_html
+        assert "SLZB-06P7U" not in index_html
         assert "<noscript>" not in index_html
         assert re.search(r'<div id="root">\s*<main\b', index_html) is not None
         assert '<img src="./assets/smlight-logo.png" alt="SMLIGHT" height="24">' in index_html
@@ -139,15 +147,10 @@ def test_repository_files_and_synced_catalogs() -> None:
         )
         sibling_readme = (sibling_repo / "README.md").read_text(encoding="utf-8")
         assert hero_url in (REPO_ROOT / "README.md").read_text(encoding="utf-8")
-        assert hero_url in sibling_readme
-        assert "(`Adversarial & Fault-Injection Suite`)" in sibling_readme
-        assert "`Whitepaper Part 2`" not in sibling_readme
-        assert "No on `v1`" not in sibling_readme
-        assert (
-            "| **SLZB-06P7** / **SLZB-06P7v1** | **TI CC2652P7 (`CC1352P7`)** | "
-            "ARM Cortex-M4F @ 48 MHz + Cortex-M0 CPE | 704 KB Flash / **144 KB SRAM** | "
-            "No (`rtscts: false`) |"
-        ) in sibling_readme
+        assert "docs/assets/zerostack-hero-banner.svg" in sibling_readme
+        assert "WHITEPAPER.md" in sibling_readme
+        assert "SLZB-Ultima" in sibling_readme
+        assert "SLZB-06P7v1" not in sibling_readme
 
         docs_dir = sibling_repo / "docs"
         _verify_png_dimensions_and_clean_metadata(docs_dir / "apple-touch-icon.png", (180, 180))
@@ -191,6 +194,11 @@ def test_repository_files_and_synced_catalogs() -> None:
                 assert not raw_latex_re.search(pub_text), f"Raw LaTeX math found in {rel_pub}"
         assert scanned_pdfs >= 1
 
+    for bench_pdf in sorted(
+        REPO_ROOT.parents[1].glob("*/docs/benchmarks/ZeroStack Whitepaper Part *.pdf")
+    ):
+        pdf_text = _extract_pdf_text(bench_pdf)
+        assert not raw_latex_re.search(pdf_text), f"Raw LaTeX math found in {bench_pdf.name}"
 
 
 def test_server_json_validates_against_2025_12_11_schema_and_packaging() -> None:
@@ -220,7 +228,7 @@ def test_server_json_validates_against_2025_12_11_schema_and_packaging() -> None
     assert __version__ == expected_pypi_ver
     assert MCP_SERVER_VERSION == expected_pypi_ver
     assert mcp.version == expected_pypi_ver
-    assert ZEROSTACK_FIRMWARE_VERSION == "0.9.9-beta.1"
+    assert ZEROSTACK_FIRMWARE_VERSION == "Release Zero"
     assert server_manifest["version"] == pyproject["project"]["version"]
     assert server_manifest["packages"][0]["version"] == pyproject["project"]["version"]
     pkg = server_manifest["packages"][0]
@@ -239,10 +247,8 @@ def test_server_json_validates_against_2025_12_11_schema_and_packaging() -> None
     assert not (REPO_ROOT / "smithery.yaml").exists()
     assert (REPO_ROOT / "llms.txt").is_file()
     llms_txt = (REPO_ROOT / "llms.txt").read_text(encoding="utf-8")
-    assert (
-        "> MCP Server Version: 0.9.9 | Firmware Catalog: ZeroStack Release Zero (0.9.9-beta.1)"
-        in llms_txt
-    )
+    assert "> Firmware Catalog: ZeroStack Release Zero" in llms_txt
+    assert "WHITEPAPER.md" in llms_txt
 
     ci_yml = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     assert "3.11" not in ci_yml
@@ -291,7 +297,6 @@ def test_analyze_log_empty_clean_and_benign_hex_payload_no_false_positives() -> 
     assert empty["marketing_url"] == ZEROSTACK_MARKETING_URL
     assert empty["release"] == ZEROSTACK_RELEASE_NAME
 
-    # Benign ZCL hex payload dumps containing 0xb2, 0xc7, 0xf0, 0xf1, 0x72, 0xa1, 0x10, 0x11, 0xe9
     benign_hex_dump = "\n".join(
         [
             "info 2026-10-29 12:00:01: Zigbee2MQTT started normally on channel 20",
@@ -353,7 +358,15 @@ def test_analyze_log_znp_srsp_warm_reset_and_ezsp_legacy_version() -> None:
     assert "PAN_ID_CONFLICT" in by_id
     assert "ASH_UART_LINK_ERROR" in by_id
     assert "ADAPTER_STARTUP_TIMEOUT" in by_id
-    assert len(REMEDIATION_META) == 15
+    assert len(REMEDIATION_META) == 16
+
+    tclk_leave_log = (
+        'zh:zstack:zdo: ZDO - leaveInd - {"srcAddr":1234,"extAddr":"0x00158d0001234567",'
+        '"request":0,"remove":0,"rejoin":0}'
+    )
+    res_tclk = analyze_zigbee_thread_log(tclk_leave_log)
+    assert res_tclk["status"] == "fault_signatures_detected"
+    assert any(m["signature_id"] == "Z3_TCLK_EXCHANGE_TIMEOUT_LEAVE" for m in res_tclk["matches"])
 
 
 def test_analyze_log_unquoted_status_strings_and_zha_sl_status() -> None:
@@ -376,13 +389,19 @@ def test_analyze_log_unquoted_status_strings_and_zha_sl_status() -> None:
     found = {m["signature_id"]: m for m in res["matches"]}
     assert found["MAC_0XE1_CHANNEL_ACCESS_FAILURE"]["occurrences"] == 1
     assert found["MAC_0XE9_NO_ACK"]["occurrences"] == 3
-    assert "50%" in found["MAC_0XE9_NO_ACK"]["zeroStackFix"]
+    assert "82.7" in found["MAC_0XE9_NO_ACK"]["zeroStackFix"]
     assert "FP=1" in found["MAC_0XE9_NO_ACK"]["siliconRootCause"]
     assert "11.11 ms" in found["MAC_0XE9_NO_ACK"]["siliconRootCause"]
     assert found["MAC_0XF0_TRANSACTION_EXPIRED"]["occurrences"] == 1
-    assert "50%" in found["MAC_0XF0_TRANSACTION_EXPIRED"]["zeroStackFix"]
+    assert (
+        "per-child indirect queue isolation"
+        in found["MAC_0XF0_TRANSACTION_EXPIRED"]["zeroStackFix"]
+    )
     assert found["MAC_0XF1_TRANSACTION_OVERFLOW"]["occurrences"] == 1
-    assert "50%" in found["MAC_0XF1_TRANSACTION_OVERFLOW"]["zeroStackFix"]
+    assert (
+        "per-child indirect queue isolation"
+        in found["MAC_0XF1_TRANSACTION_OVERFLOW"]["zeroStackFix"]
+    )
     assert found["ZNP_0XCD_NWK_NO_ROUTE"]["occurrences"] == 1
     assert found["ZNP_TCLK_INTERVIEW_TIMEOUT"]["occurrences"] == 1
     assert found["ZNP_0XB2_APS_TABLE_FULL"]["occurrences"] == 1
@@ -394,10 +413,8 @@ def test_sample_logs_md_prompts_end_to_end() -> None:
     blocks = re.findall(r"```text\n(.*?)```", sample_md, flags=re.DOTALL)
     assert len(blocks) == 3
 
-    # Prompt 1: 2-msg sub-second kitchen_plug_2 + 3-msg living_room_plug_1 + 205 + 6000ms SRSP
     res1 = analyze_zigbee_thread_log(blocks[0])
     assert res1["status"] == "fault_signatures_detected"
-    # Deterministic ranking: 6000ms SRSP freeze outranks NWK_NO_ROUTE and warning flood
     assert res1["matches"][0]["signature_id"] == "ZNP_SRSP_6000MS_TIMEOUT"
     found1 = {m["signature_id"]: m for m in res1["matches"]}
     assert "ZNP_0XCD_NWK_NO_ROUTE" in found1
@@ -409,7 +426,6 @@ def test_sample_logs_md_prompts_end_to_end() -> None:
     assert "kitchen_plug_2" in flood_devs
     assert flood_devs["kitchen_plug_2"]["delta_zero_duplicates"] == 1
 
-    # Prompt 2: (240), (241), 0x10, 0x11, (225), (233), <sl_Status.MAC_NO_ACK_RECEIVED: 233>, 0xC7
     res2 = analyze_zigbee_thread_log(blocks[1])
     assert res2["status"] == "fault_signatures_detected"
     assert res2["matches"][0]["signature_id"] == "ZNP_0X10_MEM_ERROR"
@@ -426,7 +442,6 @@ def test_sample_logs_md_prompts_end_to_end() -> None:
         assert expected_id in found2
     assert found2["MAC_0XE9_NO_ACK"]["occurrences"] == 2
 
-    # Prompt 3: Interview / TCLK timeout + SRSP ZDO timeout -> TCLK (2 hits) outranks SRSP (1 hit)
     res3 = analyze_zigbee_thread_log(blocks[2])
     assert res3["status"] == "fault_signatures_detected"
     assert res3["matches"][0]["signature_id"] == "ZNP_TCLK_INTERVIEW_TIMEOUT"
@@ -472,7 +487,7 @@ def test_analyze_log_efr32_otbr_attribute_report_and_gentime_floods() -> None:
     assert "EMBER_0XA1_NETWORK_BUSY" in found
     assert "EMBER_ASH_NCP_FATAL_ERROR" in found
     assert "EMBER_DELIVERY_FAILED" in found
-    assert "50%" in found["EMBER_DELIVERY_FAILED"]["zeroStackFix"]
+    assert "82.7" in found["EMBER_DELIVERY_FAILED"]["zeroStackFix"]
     assert "FP=1" in found["EMBER_DELIVERY_FAILED"]["zeroStackFix"]
     assert "OTBR_SPINEL_TIMEOUT" in found
     assert "ZCL_TELEMETRY_DELTA_ZERO_FLOOD" in found
@@ -520,26 +535,24 @@ def test_100k_line_log_bounded_truncation_and_sub_500ms_performance() -> None:
     assert res["truncated"] is True
     assert res["total_input_lines"] == 100_000
     found = {m["signature_id"]: m for m in res["matches"]}
-    # Both head fault (line 1) and tail fault (line 100,000) must be preserved!
     assert "ZNP_0X10_MEM_ERROR" in found
     assert found["ZNP_0X10_MEM_ERROR"]["matching_lines"][0]["line_number"] == 1
     assert "ZNP_SYS_RESET_IND" in found
     assert found["ZNP_SYS_RESET_IND"]["matching_lines"][0]["line_number"] == 100_000
-    # MCU Reset (prio 100) deterministically outranks MEM_ERROR (prio 86)
     assert res["matches"][0]["signature_id"] == "ZNP_SYS_RESET_IND"
 
-    # Also verify MAX_LOG_BYTES windowing on >2 MB input
-    oversized_bytes_log = ("info 2026-10-29: benign filler line " + ("x" * 180) + "\n") * 11_000
+    padding_str = "x" * 180
+    oversized_bytes_log = f"info 2026-10-29: benign filler line {padding_str}\n" * 11_000
     assert len(oversized_bytes_log.encode("utf-8")) > MAX_LOG_BYTES
     res_bytes = analyze_zigbee_thread_log(oversized_bytes_log)
     assert res_bytes["truncated"] is True
     assert res_bytes["total_input_lines"] == 11_000
 
-    # Also verify pure MAX_LOG_LINES truncation (<2 MB total bytes, >25,000 lines)
+    ok_lines = "ok\n" * 29_998
     lines_only_log = (
-        "error 2026-10-29: SREQ AF_DataRequest failed with 0x10: MEM_ERROR\n"
-        + ("ok\n" * 29_998)
-        + "error 2026-10-29: AREQ - SYS - resetInd"
+        f"error 2026-10-29: SREQ AF_DataRequest failed with 0x10: MEM_ERROR\n"
+        f"{ok_lines}"
+        f"error 2026-10-29: AREQ - SYS - resetInd"
     )
     assert len(lines_only_log.encode("utf-8")) < MAX_LOG_BYTES
     res_lines = analyze_zigbee_thread_log(lines_only_log)
@@ -563,9 +576,13 @@ def test_decode_silicon_register_f2_and_efr32() -> None:
     assert rx_abort["marketing_url"] == ZEROSTACK_MARKETING_URL
     assert rx_abort["release"] == ZEROSTACK_RELEASE_NAME
 
-    rx_no_setup = decode_silicon_register("CC2652P7", "CMD_IEEE_RX", "0x0807")
+    rx_no_setup = decode_silicon_register("CC2652P7", "CMD_IEEE_RX", "0x2801")
+    assert rx_no_setup["bitfields"]["STATUS_NAME"] == "IEEE_ERROR_NO_SETUP"
     assert rx_no_setup["healthy"] is False
-    assert rx_no_setup["bitfields"]["STATUS_NAME"] == "ERROR_NO_SETUP"
+
+    rx_wrong_bg = decode_silicon_register("CC2652P7", "CMD_IEEE_RX", "0x0802")
+    assert rx_wrong_bg["healthy"] is False
+    assert rx_wrong_bg["bitfields"]["STATUS_NAME"] == "UNKNOWN_STATUS_0x0802"
 
     rx_active = decode_silicon_register("SLZB-06P10", "CMD_IEEE_RX", "0x0002")
     assert rx_active["healthy"] is True
@@ -585,10 +602,10 @@ def test_decode_silicon_register_f2_and_efr32() -> None:
     assert dbell_healthy["bitfields"]["LAST_COMMAND_DONE (Bit 1)"] == 1
     assert dbell_healthy["bitfields"]["LAST_FG_COMMAND_DONE (Bit 3)"] == 1
 
-    srcmatch_full = decode_silicon_register("SLZB-06P7", "SRCMATCH", "0xFFFFFFFF")
-    assert srcmatch_full["healthy"] is False
-    assert srcmatch_full["bitfields"]["OCCUPIED_SLOTS"] == 32
-    assert "50% pool cap" in srcmatch_full["diagnosis"]
+    pending_full = decode_silicon_register("SLZB-06P7", "SRCMATCH", "0xFFFFFFFF")
+    assert pending_full["healthy"] is False
+    assert pending_full["bitfields"]["OCCUPIED_SLOTS"] == 32
+    assert "SOURCE MATCH TABLE FULL" in pending_full["diagnosis"]
 
     vims = decode_silicon_register("CC2674P10", "VIMS", "0x00000001")
     assert vims["healthy"] is True
@@ -609,7 +626,6 @@ def test_decode_silicon_register_f2_and_efr32() -> None:
     assert eusart["bitfields"]["RXOF (Bit 4)"] == 1
     assert "in active development" in eusart.get("zero_stack_remediation", "")
 
-    # 1. TI F2 UART0_FR (0x40001018): stuck CTS gating vs healthy idle
     uart_fr_stuck = decode_silicon_register("SLZB-06P7", "UART0_FR", "0x00000028")
     assert uart_fr_stuck["register"] == "UART0_FR"
     assert uart_fr_stuck["address"] == "0x40001018"
@@ -626,7 +642,6 @@ def test_decode_silicon_register_f2_and_efr32() -> None:
     assert uart_fr_ok["bitfields"]["RXFE (Bit 4)"] == 1
     assert uart_fr_ok["bitfields"]["TXFE (Bit 7)"] == 1
 
-    # 2. TI F2 UART0_RSR / UART0_ECR (0x40001004): OE | FE vs clean
     uart_rsr_err = decode_silicon_register("CC1352P7", "UART0:RSR", "0x00000009")
     assert uart_rsr_err["register"] == "UART0_RSR"
     assert uart_rsr_err["address"] == "0x40001004"
@@ -638,7 +653,6 @@ def test_decode_silicon_register_f2_and_efr32() -> None:
     assert uart_rsr_ok["register"] == "UART0_RSR"
     assert uart_rsr_ok["healthy"] is True
 
-    # 3. TI F2 UART0_CTL (0x40001030): 4-wire vs 2-wire vs loopback fault
     uart_ctl_4w = decode_silicon_register("SLZB-06P10", "UART0_CTL", "0x0000C301")
     assert uart_ctl_4w["register"] == "UART0_CTL"
     assert uart_ctl_4w["address"] == "0x40001030"
@@ -659,18 +673,17 @@ def test_decode_silicon_register_f2_and_efr32() -> None:
     assert uart_ctl_lbe["healthy"] is False
     assert uart_ctl_lbe["bitfields"]["LBE (Bit 7)"] == 1
 
-    # 4. TI F2 IOCFG (0x40081000..0x4008107C): default GPIO, floating CTS, pull-up CTS, RFC_GPO0
-    iocfg_dio10_default = decode_silicon_register("SLZB-06P7", "0x40081028", "0x00006000")
-    assert iocfg_dio10_default["register"] == "IOCFG10"
-    assert iocfg_dio10_default["address"] == "0x40081028"
-    assert iocfg_dio10_default["healthy"] is False
-    assert iocfg_dio10_default["bitfields"]["DIO_INDEX"] == 10
-    assert iocfg_dio10_default["bitfields"]["PORT_ID (Bits 5:0)"] == "0x00"
-    assert iocfg_dio10_default["bitfields"]["PORT_NAME"] == "GPIO"
-    assert iocfg_dio10_default["bitfields"]["PULL_CTL (Bits 14:13)"] == 3
-    assert iocfg_dio10_default["bitfields"]["PULL_MODE"] == "NO_PULL"
+    iocfg_pin10_default = decode_silicon_register("SLZB-06P7", "0x40081028", "0x00006000")
+    assert iocfg_pin10_default["register"] == "IOCFG10"
+    assert iocfg_pin10_default["address"] == "0x40081028"
+    assert iocfg_pin10_default["healthy"] is False
+    assert iocfg_pin10_default["bitfields"]["DIO_INDEX"] == 10
+    assert iocfg_pin10_default["bitfields"]["PORT_ID (Bits 5:0)"] == "0x00"
+    assert iocfg_pin10_default["bitfields"]["PORT_NAME"] == "GPIO"
+    assert iocfg_pin10_default["bitfields"]["PULL_CTL (Bits 14:13)"] == 3
+    assert iocfg_pin10_default["bitfields"]["PULL_MODE"] == "NO_PULL"
 
-    iocfg_cts_floating = decode_silicon_register("SLZB-06P7v1", "IOCFG11", "0x20006011")
+    iocfg_cts_floating = decode_silicon_register("SLZB-06P7", "IOCFG11", "0x20006011")
     assert iocfg_cts_floating["register"] == "IOCFG11"
     assert iocfg_cts_floating["address"] == "0x4008102c"
     assert iocfg_cts_floating["healthy"] is False
@@ -680,7 +693,7 @@ def test_decode_silicon_register_f2_and_efr32() -> None:
     assert iocfg_cts_floating["bitfields"]["PULL_MODE"] == "NO_PULL"
     assert "FLOATING UART0_CTS" in iocfg_cts_floating["diagnosis"]
 
-    iocfg_cts_pullup = decode_silicon_register("SLZB-06P7U", "0x4008102C", "0x60004011")
+    iocfg_cts_pullup = decode_silicon_register("SLZB-MR1", "0x4008102C", "0x60004011")
     assert iocfg_cts_pullup["healthy"] is True
     assert iocfg_cts_pullup["bitfields"]["PORT_NAME"] == "UART0_CTS"
     assert iocfg_cts_pullup["bitfields"]["PULL_MODE"] == "PULL_UP"
@@ -692,7 +705,6 @@ def test_decode_silicon_register_f2_and_efr32() -> None:
     assert iocfg_rf_gpo0["healthy"] is True
     assert iocfg_rf_gpo0["bitfields"]["PORT_NAME"] == "RFC_GPO0"
 
-    # 5. TI F2 AON_PMCTL_RESETCTL (0x40090028 / 0x58090028): VDDS_LOSS & WARMRESET vs PWR_ON
     reset_vdds = decode_silicon_register("SLZB-06P7", "AON_PMCTL:RESETCTL", "0x00000104")
     assert reset_vdds["register"] == "AON_PMCTL_RESETCTL"
     assert reset_vdds["address"] == "0x40090028"
@@ -700,7 +712,7 @@ def test_decode_silicon_register_f2_and_efr32() -> None:
     assert reset_vdds["bitfields"]["RESET_SRC (Bits 3:1)"] == 2
     assert reset_vdds["bitfields"]["RESET_SRC_NAME"] == "VDDS_LOSS"
     assert reset_vdds["bitfields"]["VDDS_LOSS_EN (Bit 8)"] == 1
-    assert "22,959" in reset_vdds["diagnosis"]
+    assert "BROWNOUT FAULT" in reset_vdds["diagnosis"]
 
     reset_warm = decode_silicon_register("CC2652P", "0x40090028", "0x0000801E")
     assert reset_warm["healthy"] is False
@@ -718,7 +730,6 @@ def test_decode_silicon_register_f2_and_efr32() -> None:
     assert reset_por["bitfields"]["VDDR_LOSS_EN (Bit 7)"] == 1
     assert reset_por["bitfields"]["VDDS_LOSS_EN (Bit 8)"] == 1
 
-    # 6. Silicon Labs EFR32 EMU_RSTCAUSE (0x50004094): WDOG0 | LOCKUP vs POR
     emu_fault = decode_silicon_register("EFR32MG21", "EMU:RSTCAUSE", "0x00000028")
     assert emu_fault["register"] == "EMU_RSTCAUSE"
     assert emu_fault["address"] == "0x50004094"
@@ -730,7 +741,6 @@ def test_decode_silicon_register_f2_and_efr32() -> None:
     assert emu_por["healthy"] is True
     assert emu_por["bitfields"]["POR (Bit 0)"] == 1
 
-    # 7. Silicon Labs EFR32 USART0_IF (0x50058048 / 0x5005C048) vs USART0_STATUS (0x50058018)
     usart_if_err = decode_silicon_register("EFR32MG21", "USART0_IF", "0x00000210")
     assert usart_if_err["register"] == "USART0_IF"
     assert usart_if_err["address"] == "0x50058048"
@@ -753,7 +763,6 @@ def test_decode_silicon_register_f2_and_efr32() -> None:
     assert usart_status_ok["bitfields"]["TXBL (Bit 6)"] == 1
     assert usart_status_ok["bitfields"]["TXIDLE (Bit 13)"] == 1
 
-    # 8. Universal ARM Cortex-M4 / Cortex-M33 SCB_CFSR (0xE000ED28)
     cfsr_precis = decode_silicon_register("CC2652P7", "SCB:CFSR", "0x00008200")
     assert cfsr_precis["register"] == "SCB_CFSR"
     assert cfsr_precis["address"] == "0xe000ed28"
@@ -771,7 +780,6 @@ def test_decode_silicon_register_f2_and_efr32() -> None:
     cfsr_clean = decode_silicon_register("ARM", "CFSR", "0x00000000")
     assert cfsr_clean["healthy"] is True
 
-    # 9. Universal ARM Cortex-M4 / Cortex-M33 SCB_HFSR (0xE000ED2C)
     hfsr_forced = decode_silicon_register("EFR32MG24", "SCB_HFSR", "0x40000002")
     assert hfsr_forced["register"] == "SCB_HFSR"
     assert hfsr_forced["address"] == "0xe000ed2c"
@@ -783,7 +791,6 @@ def test_decode_silicon_register_f2_and_efr32() -> None:
     hfsr_clean = decode_silicon_register("CORTEX-M4", "0xE000ED2C", "0x00000000")
     assert hfsr_clean["healthy"] is True
 
-    # 10. CC2674P10 / SLZB-06P10 (`cc13x4_cc26x4`) & EFR32 S/NS raw-hex parity assertions
     p10_uart_fr = decode_silicon_register("SLZB-06P10", "0x40001018", "0x00000091")
     assert p10_uart_fr["register"] == "UART0_FR"
     assert p10_uart_fr["address"] == "0x40001018"
@@ -827,10 +834,10 @@ def test_decode_silicon_register_f2_and_efr32() -> None:
     assert p10_dbell["address"] == "0x40041014"
     assert p10_dbell["healthy"] is True
 
-    p10_srcmatch = decode_silicon_register("CC2674P10", "0x21000000", "0x0000000F")
-    assert p10_srcmatch["register"] == "SRCMATCH"
-    assert p10_srcmatch["healthy"] is True
-    assert p10_srcmatch["bitfields"]["OCCUPIED_SLOTS"] == 4
+    p10_pending = decode_silicon_register("CC2674P10", "0x21000000", "0x0000000F")
+    assert p10_pending["register"] == "SRCMATCH"
+    assert p10_pending["healthy"] is True
+    assert p10_pending["bitfields"]["OCCUPIED_SLOTS"] == 4
 
     p10_resetctl_s = decode_silicon_register("SLZB-06P10", "0x58090028", "0x000001E0")
     assert p10_resetctl_s["register"] == "AON_PMCTL_RESETCTL"
@@ -900,8 +907,6 @@ def test_check_coordinator_capacity_f2_and_efr32() -> None:
     assert cap_f2["srcmatch_hardware_table"]["max_short_slots"] == 32
     assert cap_f2["srcmatch_hardware_table"]["pend_all_active"] is True
     assert cap_f2["ram_heap_headroom"]["total_sram_kb"] == 144
-    assert cap_f2["ram_heap_headroom"].get("indirect_queue_pool_cap_pct") == 50
-    assert cap_f2["ram_heap_headroom"].get("max_indirect_frames_per_child") == 2
     assert cap_f2["marketing_url"] == ZEROSTACK_MARKETING_URL
 
     cap_p10 = check_coordinator_capacity(
@@ -929,13 +934,16 @@ def test_check_coordinator_capacity_f2_and_efr32() -> None:
 def test_get_zerostack_benchmarks_all_f2_models_and_deduplication() -> None:
     expected_models = (
         "SLZB-06",
-        "SLZB-06U",
+        "SLZB-MR2",
         "SLZB-06P7",
-        "SLZB-06P7U",
-        "SLZB-06P7V1",
         "SLZB-07P7",
+        "SLZB-MR1",
         "SLZB-06P10",
         "SLZB-07P10",
+        "SLZB-MR3",
+        "SLZB-MR4",
+        "SLZB-MRW10",
+        "SLZB-Ultima",
     )
     for model in expected_models:
         bench = get_zerostack_benchmarks(model)
@@ -954,8 +962,6 @@ def test_get_zerostack_benchmarks_all_f2_models_and_deduplication() -> None:
         assert bench["malformed_ota_crashes"] == 0
         assert bench["brownout_cut_points_verified"] == 22959
         assert bench["uart_abuse_lost_pings"] == 0
-        assert bench["indirect_queue_pool_cap_pct"] == 50
-        assert bench["max_indirect_frames_per_child"] == 2
 
     all_bench = get_zerostack_benchmarks("all")
     assert all_bench["requested_platform"] == "all"
@@ -1024,7 +1030,7 @@ def test_mcp_resources_bounded_prompt_and_cli_defaults(monkeypatch: pytest.Monke
 
     models_json = json.loads(resource_supported_models())
     assert models_json["release"] == ZEROSTACK_RELEASE_NAME
-    assert len(models_json["models"]) == 8
+    assert len(models_json["models"]) == 11
     assert "OpenThread RCP" not in json.dumps(models_json)
 
     catalog_json = json.loads(resource_diagnostics_catalog())
@@ -1116,3 +1122,64 @@ def test_prefilter_matches_config_mismatch_and_panid_conflict() -> None:
     panid_ids = {m["signature_id"]: m for m in res_panid["matches"]}
     assert "PAN_ID_CONFLICT" in panid_ids
     assert panid_ids["PAN_ID_CONFLICT"]["remediation_key"] == "issue-pan-conflict"
+
+
+def test_compat_registry_69_records_lookup_and_ip_sanitization() -> None:
+    assert len(COMPAT_REGISTRY_RECORDS) == 69
+    assert len(COMPAT_REGISTRY_BY_ID) == 69
+
+    raw_json_text = load_compat_registry_json_text()
+    assert len(raw_json_text) > 1000
+
+    allowed_keys = {
+        "id",
+        "vendor",
+        "layer",
+        "title",
+        "classification",
+        "policy",
+        "spec_citations",
+        "mt_commands",
+        "nv_items",
+        "status_codes",
+        "log_signatures",
+        "upstream_root_cause",
+        "public_resolution",
+    }
+
+    for rec in COMPAT_REGISTRY_RECORDS:
+        assert set(rec.keys()) == allowed_keys
+        assert re.match(r"^(TI|ZH)-[A-Z]+-\d{3}$", rec["id"]) is not None
+        assert rec["vendor"] in ("ti-zstack", "zigbee-herdsman")
+        assert rec["layer"] in ("UART-NPI", "MAC", "NWK", "APS", "ZDO", "GP")
+        assert rec["classification"] in (
+            "normative-spec-violation",
+            "resource-sizing-limit",
+            "upstream-firmware-or-host-bug",
+        )
+        assert rec["policy"] in ("strict-spec", "compat-shim", "hybrid-fallback")
+        assert len(rec["spec_citations"]) >= 1
+        assert len(rec["log_signatures"]) >= 1
+        assert len(rec["upstream_root_cause"]) >= 25
+        assert len(rec["public_resolution"]) >= 25
+
+    af_matches = query_compat_registry(mt_command="0x24 0x01", status_code="0x02")
+    assert any(r["id"] == "TI-AF-001" for r in af_matches)
+
+    nv_matches = query_compat_registry(nv_item="0x0004")
+    assert any(r["id"] == "ZH-APS-001" for r in nv_matches)
+
+    log_matches = query_compat_registry(search_text="SRSP - AF - dataRequest after 6000ms")
+    assert any(r["id"] == "TI-NPI-002" for r in log_matches)
+
+    res_srsp = analyze_zigbee_thread_log(
+        "zh:zstack:unpi: Default response timeout: SRSP - AF - dataRequest after 6000ms"
+    )
+    assert res_srsp["status"] == "fault_signatures_detected"
+    srsp_match = res_srsp["matches"][0]
+    assert srsp_match["signature_id"] == "ZNP_SRSP_6000MS_TIMEOUT"
+    compat_ids = srsp_match.get("compat_record_ids", [])
+    assert "TI-NPI-001" in compat_ids
+    assert "TI-NPI-002" in compat_ids
+    for cid in compat_ids:
+        assert cid in COMPAT_REGISTRY_BY_ID

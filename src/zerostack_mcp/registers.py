@@ -138,7 +138,7 @@ F2_CMD_IEEE_RX_STATUS_MAP: dict[int, tuple[str, bool, str]] = {
         (
             "FAULT (DONE_ABORT = 0x0405): Background receiver was aborted via CMD_ABORT or "
             "channel switch and was not re-armed, causing 0xe1: MAC_CHANNEL_ACCESS_FAILURE. "
-            "SMLIGHT ZeroStack (Release Zero 0.9.9-beta.1) enforces self-healing Sub-MAC "
+            "SMLIGHT ZeroStack (Release Zero) enforces self-healing Sub-MAC "
             "receiver and synthesizer state recovery."
         ),
     ),
@@ -149,7 +149,7 @@ F2_CMD_IEEE_RX_STATUS_MAP: dict[int, tuple[str, bool, str]] = {
             "FAULT (ERROR_NO_SETUP = 0x0807 / legacy DONE_ABORT): Radio operation command "
             "rejected because CMD_RADIO_SETUP was not executed or background RX aborted after "
             "an ED scan / synth recalibration without re-arming, causing 0xe1: "
-            "MAC_CHANNEL_ACCESS_FAILURE. SMLIGHT ZeroStack (Release Zero 0.9.9-beta.1) enforces "
+            "MAC_CHANNEL_ACCESS_FAILURE. SMLIGHT ZeroStack (Release Zero) enforces "
             "self-healing Sub-MAC receiver and synthesizer state recovery."
         ),
     ),
@@ -184,17 +184,14 @@ F2_CMD_IEEE_RX_STATUS_MAP: dict[int, tuple[str, bool, str]] = {
         (
             "FAULT (IEEE_DONE_ABORT = 0x2407): IEEE 802.15.4 background operation aborted by "
             "command or channel switch without re-arming, causing 0xe1: "
-            "MAC_CHANNEL_ACCESS_FAILURE. SMLIGHT ZeroStack (Release Zero 0.9.9-beta.1) enforces "
+            "MAC_CHANNEL_ACCESS_FAILURE. SMLIGHT ZeroStack (Release Zero) enforces "
             "self-healing Sub-MAC receiver and synthesizer state recovery."
         ),
     ),
     0x2800: (
         "IEEE_ERROR_PAR",
         False,
-        (
-            "FAULT (IEEE_ERROR_PAR = 0x2800): Illegal IEEE 802.15.4 command parameter or "
-            "corrupted SrcMatch pointer."
-        ),
+        "FAULT (IEEE_ERROR_PAR = 0x2800): Illegal IEEE 802.15.4 command parameter.",
     ),
     0x2801: (
         "IEEE_ERROR_NO_SETUP",
@@ -223,10 +220,7 @@ F2_CMD_IEEE_RX_STATUS_MAP: dict[int, tuple[str, bool, str]] = {
     0x2804: (
         "IEEE_ERROR_RXOVF",
         False,
-        (
-            "FAULT (IEEE_ERROR_RXOVF = 0x2804): RF Core circular rfc_dataEntry_t RX queue "
-            "overflowed (DATA_ENTRY_UNFINISHED == 4 saturation)."
-        ),
+        "FAULT (IEEE_ERROR_RXOVF = 0x2804): IEEE 802.15.4 receive queue overflowed.",
     ),
     0x2805: (
         "IEEE_ERROR_TXUNF",
@@ -259,13 +253,16 @@ def normalize_chip_family(chip: str) -> ChipFamilyLiteral:
             "CC13XX",
             "SLZB06",
             "SLZB07",
+            "SLZBMR",
+            "SLZBULTIMA",
         )
     ):
         return "F2_CC1352_CC2652"
     raise ValueError(
         f"Unsupported chip '{chip}'. Expected TI SimpleLink F2 (CC2652P / CC2652P7 / CC1352P7 / "
-        "CC2674P10 across SLZB-06, SLZB-06U, SLZB-06P7, SLZB-06P7U, SLZB-06P7v1, SLZB-07P7, "
-        "SLZB-06P10, SLZB-07P10) or Silicon Labs EFR32."
+        "CC2674P10 across SLZB-06, SLZB-MR2, SLZB-06P7, SLZB-07P7, SLZB-MR1, SLZB-06P10, "
+        "SLZB-07P10, SLZB-MR3, SLZB-MR4, SLZB-MRW10, SLZB-Ultima, incl. U variants) or "
+        "Silicon Labs EFR32."
     )
 
 
@@ -286,7 +283,7 @@ def _decode_f2_cmd_ieee_rx(val: int) -> RegisterDecodeResult:
     return {
         "chip": "CC2652P / CC2652P7 (CC1352P7) / CC2674P10 (SimpleLink F2)",
         "register": "CMD_IEEE_RX",
-        "address": "RF_cmdIEEERx.status",
+        "address": "0x21000010",
         "raw_hex": f"0x{status16:04x}",
         "healthy": healthy,
         "bitfields": {
@@ -314,7 +311,7 @@ def _decode_f2_cmd_ieee_csma(val: int) -> RegisterDecodeResult:
     if busy_fail:
         diagnosis = (
             "CCA BUSY (IEEE_DONE_BUSY = 0x2401): CSMA/CA failed across all backoff slots "
-            "(0xe1: MAC_CHANNEL_ACCESS_FAILURE). Check whether background CMD_IEEE_RX was aborted."
+            "(0xe1: MAC_CHANNEL_ACCESS_FAILURE). Check whether background CMD_IEEE_RX was stopped."
         )
     elif no_rx_error:
         diagnosis = (
@@ -328,7 +325,7 @@ def _decode_f2_cmd_ieee_csma(val: int) -> RegisterDecodeResult:
     return {
         "chip": "CC2652P / CC2652P7 (CC1352P7) / CC2674P10 (SimpleLink F2)",
         "register": "CMD_IEEE_CSMA",
-        "address": "RF_cmdIEEECsma.status",
+        "address": "0x21000020",
         "raw_hex": f"0x{status16:04x}",
         "healthy": healthy and not busy_fail,
         "bitfields": {
@@ -367,10 +364,9 @@ def _decode_f2_rfc_dbell(val: int) -> RegisterDecodeResult:
         )
     else:
         diagnosis = (
-            "RF INTERRUPT STRIPPED (RFC_DBELL:RFCPEIEN & 0x0A != 0x0A): Background/Foreground "
+            "RF INTERRUPT MASKED (RFC_DBELL:RFCPEIEN & 0x0A != 0x0A): Background/Foreground "
             "CPE command-done interrupts (LAST_COMMAND_DONE Bit 1, LAST_FG_COMMAND_DONE Bit 3) "
-            "were stripped during foreground command termination or RF_FsmEventLastCommandDone "
-            "SWI race, stalling the Sub-MAC state machine."
+            "are disabled."
         )
 
     diag_url = f"{ZEROSTACK_DIAGNOSTICS_BASE}/mac-channel-access-failure-0xe1-cca-csma-stuck.md"
@@ -411,27 +407,22 @@ def _decode_f2_srcmatch(val: int) -> RegisterDecodeResult:
 
     if exhausted:
         diagnosis = (
-            "SRCMATCH TABLE FULL (32/32 slots occupied, mask=0xffffffff): All 32 hardware "
-            "short-address source-matching slots in the F2 Cortex-M0 CPE RFC_RAM table are "
-            "occupied; beyond 32 direct sleepy ZEDs, the radio sets pendAll (FP=1 on all ACKs). "
-            "On stock Z-Stack, 11.11 ms per-frame flash security stalls delay indirect frame "
-            "dequeue past the ZED's RX poll window and sleeping ZEDs can hoard nearly 100% of "
-            "the nwkDB buffer pool. SMLIGHT ZeroStack (Release Zero 0.9.9-beta.1) eliminates "
-            "flash-read stalls during sleepy poll windows (82.7 us NWK encrypt, 0 flash reads) "
-            "and enforces indirect queue quota isolation (50% pool cap, max 2 queued frames per "
-            "sleeping child)."
+            "SOURCE MATCH TABLE FULL (32/32 slots occupied, mask=0xffffffff): All 32 hardware "
+            "short-address source-matching slots are occupied; beyond 32 direct sleepy ZEDs, "
+            "IEEE 802.15.4 ACKs set Frame Pending (FP=1) for all polling children. Route "
+            "additional sleepy end devices through mains-powered Zigbee routers."
         )
     else:
         diagnosis = (
-            f"HEALTHY ({occupied_count}/32 hardware SrcMatch slots occupied, "
-            f"{32 - occupied_count} slots free before pendAll promotion)."
+            f"HEALTHY ({occupied_count}/32 hardware source-matching slots occupied, "
+            f"{32 - occupied_count} slots free)."
         )
 
     diag_url = f"{ZEROSTACK_DIAGNOSTICS_BASE}/mac-no-ack-0xe9-sleepy-aqara-tuya-child-drops.md"
     return {
         "chip": "CC2652P / CC2652P7 (CC1352P7) / CC2674P10 (SimpleLink F2)",
         "register": "SRCMATCH",
-        "address": "RFC_RAM:srcMatchShortEntry",
+        "address": "0x21000000",
         "raw_hex": f"0x{mask32:08x}",
         "healthy": not exhausted,
         "bitfields": {
@@ -551,8 +542,8 @@ def _decode_efr32_eusart0(val: int, reg_raw: str = "") -> RegisterDecodeResult:
         diagnosis = (
             "UART RX FIFO OVERRUN (EUSART0:IF.RXOF Bit 4 = 1): Hardware EUSART0 receive FIFO "
             "overflowed while interrupts were masked, triggering ASH_NCP_FATAL_ERROR / "
-            "EZSP_ERROR_OVERFLOW. Verify UART/Ethernet bridge stability and hardware RTS/CTS "
-            "flow control. (Note: SMLIGHT ZeroStack Release Zero 0.9.9-beta.1 currently ships on "
+            "EZSP_ERROR_OVERFLOW. Verify UART/Ethernet bridge stability and serial "
+            "flow control. (Note: SMLIGHT ZeroStack (Release Zero) currently ships on "
             "SMLIGHT TI SimpleLink F2 coordinators with 0 lost pings across hostile UART framing "
             "storms; EFR32 ZeroStack support is in active development.)"
         )
@@ -565,7 +556,7 @@ def _decode_efr32_eusart0(val: int, reg_raw: str = "") -> RegisterDecodeResult:
     else:
         diagnosis = (
             f"HEALTHY: EUSART0:IF status 0x{word32:08x} (RXOF=0, FERR=0, PERR=0). "
-            "(Note: SMLIGHT ZeroStack Release Zero 0.9.9-beta.1 ships on SMLIGHT TI SimpleLink F2 "
+            "(Note: SMLIGHT ZeroStack (Release Zero) ships on SMLIGHT TI SimpleLink F2 "
             "coordinators; EFR32 support is in active development.)"
         )
 
@@ -593,9 +584,10 @@ def _decode_efr32_eusart0(val: int, reg_raw: str = "") -> RegisterDecodeResult:
         "diagnosis": diagnosis,
         "release": ZEROSTACK_RELEASE_NAME,
         "zero_stack_remediation": (
-            "SMLIGHT ZeroStack Release Zero (0.9.9-beta.1) currently ships on SMLIGHT TI "
-            "SimpleLink F2 coordinators (SLZB-06, SLZB-06U, SLZB-06P7, SLZB-06P7U, SLZB-06P7v1, "
-            "SLZB-07P7, SLZB-06P10, SLZB-07P10), while EFR32 support is in active development. "
+            "SMLIGHT ZeroStack (Release Zero) currently ships on SMLIGHT TI "
+            "SimpleLink F2 coordinators (SLZB-06, SLZB-MR2, SLZB-06P7, SLZB-07P7, SLZB-MR1, "
+            "SLZB-06P10, SLZB-07P10, SLZB-MR3, SLZB-MR4, SLZB-MRW10, SLZB-Ultima, incl. U "
+            "variants), while EFR32 support is in active development. "
             f"See {ZEROSTACK_MARKETING_URL}"
         ),
         "silicon_note_url": F2_SILICON_NOTE_URL,
@@ -636,21 +628,19 @@ def _decode_f2_uart0_fr(val: int) -> RegisterDecodeResult:
 
     if tx_stalled_by_cts:
         diagnosis = (
-            "UART TX STALLED BY CTS GATING (UART0:FR BUSY=1, TXFF=1, CTS=0): PL011 transmitter "
-            "is blocked waiting for DIO11 CTS assertion because 4-wire CTS flow control "
-            "(UART0:CTL.CTSEN=1) is enabled on a 2-wire UART harness (SLZB-06, SLZB-06P7, "
-            "SLZB-06P7v1, SLZB-07P7, SLZB-07P10), causing 6000ms ZNP SRSP timeouts. SMLIGHT "
-            "ZeroStack (Release Zero 0.9.9-beta.1) auto-senses unwired CTS pins (CTSEN=0) so TX "
-            "never deadlocks."
+            "UART TX STALLED BY CTS GATING (BUSY=1, TXFF=1, CTS=0): Hardware transmitter "
+            "is waiting for CTS assertion while hardware flow control is enabled on a "
+            "2-wire UART path, causing 6000ms TI SWRA198 MT/ZNP SRSP timeouts. Disable "
+            "hardware flow control in host serial configuration for 2-wire adapters."
         )
     elif rxff:
         diagnosis = (
-            "UART RX FIFO FULL (UART0:FR RXFF=1): 32-byte hardware receive FIFO is saturated; "
-            "imminent UART0:RSR.OE overrun if CPU interrupts are masked during flash compaction."
+            "UART RX FIFO FULL (RXFF=1): Hardware receive FIFO is saturated; verify host "
+            "UART baud rate and TI SWRA198 MT frame pacing."
         )
     else:
         diagnosis = (
-            f"HEALTHY: UART0:FR status 0x{word32:08x} (CTS={int(cts)}, BUSY={int(busy)}, "
+            f"HEALTHY: UART0 status 0x{word32:08x} (CTS={int(cts)}, BUSY={int(busy)}, "
             f"RXFE={int(rxfe)}, TXFF={int(txff)}, RXFF={int(rxff)}, TXFE={int(txfe)})."
         )
 
@@ -690,7 +680,7 @@ def _decode_f2_uart0_rsr(val: int) -> RegisterDecodeResult:
     if not healthy:
         errors: list[str] = []
         if oe:
-            errors.append("OE (Bit 3: 32-byte PL011 hardware RX FIFO overrun)")
+            errors.append("OE (Bit 3: hardware RX FIFO overrun)")
         if fe:
             errors.append("FE (Bit 0: framing error / baud rate mismatch)")
         if be:
@@ -698,15 +688,14 @@ def _decode_f2_uart0_rsr(val: int) -> RegisterDecodeResult:
         if pe:
             errors.append("PE (Bit 1: parity error)")
         diagnosis = (
-            f"UART0 RECEIVE ERROR ({', '.join(errors)}): Stock Z-Stack drops MT/ZNP SREQ frames "
-            "when NVOCTP flash compaction masks UART ISRs or when line glitches corrupt SOF "
-            "framing. SMLIGHT ZeroStack (Release Zero 0.9.9-beta.1) sustains 0 lost pings across "
-            "hostile UART framing and garbage-injection storms."
+            f"UART0 RECEIVE ERROR ({', '.join(errors)}): Serial framing or FIFO overrun "
+            "detected on the TI SWRA198 MT/ZNP host transport. Verify host UART framing "
+            "(8N1) and serial link integrity."
         )
     else:
         diagnosis = (
-            f"HEALTHY: UART0:RSR/ECR status 0x{word32:08x} (FE=0, PE=0, BE=0, OE=0; zero "
-            "PL011 receive framing or overrun errors)."
+            f"HEALTHY: UART0 receive status 0x{word32:08x} (FE=0, PE=0, BE=0, OE=0; zero "
+            "receive framing or overrun errors)."
         )
 
     diag_url = (
@@ -748,25 +737,23 @@ def _decode_f2_uart0_ctl(val: int) -> RegisterDecodeResult:
     if not (uarten and txe and rxe):
         diagnosis = (
             f"UART0 TRANSCEIVER DISABLED (UARTEN={int(uarten)}, TXE={int(txe)}, RXE={int(rxe)}): "
-            "PL011 UART0 is not fully enabled for bidirectional ZNP host transport."
+            "UART0 is not fully enabled for bidirectional ZNP host transport."
         )
     elif lbe:
         diagnosis = (
-            "UART0 LOOPBACK ENABLED (LBE=1): PL011 TXD is internally looped back to RXD, "
+            "UART0 LOOPBACK ENABLED (LBE=1): TXD is internally looped back to RXD, "
             "isolating the coordinator from physical host UART pins."
         )
     elif ctsen or rtsen:
         diagnosis = (
             f"HEALTHY (4-WIRE FLOW CONTROL: CTSEN={int(ctsen)}, RTSEN={int(rtsen)}): Valid on "
-            "4-wire SMLIGHT coordinators with DIO10/DIO11 routed (SLZB-06U, SLZB-06P7U, "
-            "SLZB-06P10). On 2-wire boards (SLZB-06, SLZB-06P7, SLZB-06P7v1, SLZB-07P7, "
-            "SLZB-07P10), CTSEN=1 stalls TX if DIO11 CTS is unstrapped; SMLIGHT ZeroStack "
-            "auto-senses unwired CTS pins and leaves CTSEN=0."
+            "4-wire SMLIGHT coordinators with dedicated hardware flow-control wiring. On "
+            "2-wire boards, disable hardware flow control in host serial configuration."
         )
     else:
         diagnosis = (
             "HEALTHY (2-WIRE UART CONTRACT: CTSEN=0, RTSEN=0, UARTEN=1, TXE=1, RXE=1): "
-            "Hardware RTS/CTS gating disabled; compatible with 2-wire and 4-wire harnesses."
+            "Hardware flow-control gating disabled; compatible with 2-wire and 4-wire harnesses."
         )
 
     diag_url = f"{ZEROSTACK_DIAGNOSTICS_BASE}/z2m-srsp-af-datarequest-6000ms-timeout.md"
@@ -840,13 +827,13 @@ def _decode_f2_iocfg(
     unconfigured_default_gpio = port_id == 0x00 and not ie and pull_ctl == 3
     healthy = not (floating_cts or input_disabled_on_rx_or_cts or unconfigured_default_gpio)
 
-    dio_label = f"DIO{dio_idx} ({addr_hex})" if dio_idx is not None else f"IOCFG ({addr_hex})"
+    dio_label = f"IOCFG{dio_idx} ({addr_hex})" if dio_idx is not None else f"IOCFG ({addr_hex})"
     if floating_cts:
         diagnosis = (
             f"FLOATING UART0_CTS INPUT ON {dio_label} (PORT_ID=0x11 UART0_CTS, IE=1, "
             "PULL_CTL=3 NO_PULL): Input buffer is enabled on UART0_CTS without an internal pull "
             "resistor; on 2-wire boards without an external CTS driver, the floating pin "
-            "deasserts CTS and deadlocks UART0 TX (6000ms SRSP timeout)."
+            "deasserts CTS and blocks UART0 TX (6000ms SRSP timeout)."
         )
     elif input_disabled_on_rx_or_cts:
         diagnosis = (
@@ -923,9 +910,8 @@ def _decode_f2_aon_pmctl_resetctl(
     src_name, healthy, src_desc = F2_RESET_SRC_MAP[reset_src]
     if not healthy:
         diagnosis = (
-            f"{src_desc} SMLIGHT ZeroStack (Release Zero 0.9.9-beta.1) is verified across 22,959 "
-            "simulated NOR flash brownout power-loss cut points with 0 bricked boots and 147.8x "
-            "fewer flash writes."
+            f"{src_desc} Verify 3.3V power rail stability and inspect host logs for "
+            "AREQ - SYS - resetInd."
         )
     else:
         diagnosis = f"HEALTHY (RESET_SRC={reset_src} [{src_name}]): {src_desc}"
@@ -1054,9 +1040,10 @@ def _decode_efr32_emu_rstcause(val: int, reg_raw: str = "") -> RegisterDecodeRes
         "diagnosis": diagnosis,
         "release": ZEROSTACK_RELEASE_NAME,
         "zero_stack_remediation": (
-            "SMLIGHT ZeroStack Release Zero (0.9.9-beta.1) currently ships on SMLIGHT TI "
-            "SimpleLink F2 coordinators (SLZB-06, SLZB-06U, SLZB-06P7, SLZB-06P7U, SLZB-06P7v1, "
-            "SLZB-07P7, SLZB-06P10, SLZB-07P10), while EFR32 support is in active development. "
+            "SMLIGHT ZeroStack (Release Zero) currently ships on SMLIGHT TI "
+            "SimpleLink F2 coordinators (SLZB-06, SLZB-MR2, SLZB-06P7, SLZB-07P7, SLZB-MR1, "
+            "SLZB-06P10, SLZB-07P10, SLZB-MR3, SLZB-MR4, SLZB-MRW10, SLZB-Ultima, incl. U "
+            "variants), while EFR32 support is in active development. "
             f"See {ZEROSTACK_MARKETING_URL}"
         ),
         "silicon_note_url": F2_SILICON_NOTE_URL,
@@ -1143,9 +1130,10 @@ def _decode_efr32_usart0_if(
         "diagnosis": diagnosis,
         "release": ZEROSTACK_RELEASE_NAME,
         "zero_stack_remediation": (
-            "SMLIGHT ZeroStack Release Zero (0.9.9-beta.1) currently ships on SMLIGHT TI "
-            "SimpleLink F2 coordinators (SLZB-06, SLZB-06U, SLZB-06P7, SLZB-06P7U, SLZB-06P7v1, "
-            "SLZB-07P7, SLZB-06P10, SLZB-07P10), while EFR32 support is in active development. "
+            "SMLIGHT ZeroStack (Release Zero) currently ships on SMLIGHT TI "
+            "SimpleLink F2 coordinators (SLZB-06, SLZB-MR2, SLZB-06P7, SLZB-07P7, SLZB-MR1, "
+            "SLZB-06P10, SLZB-07P10, SLZB-MR3, SLZB-MR4, SLZB-MRW10, SLZB-Ultima, incl. U "
+            "variants), while EFR32 support is in active development. "
             f"See {ZEROSTACK_MARKETING_URL}"
         ),
         "silicon_note_url": F2_SILICON_NOTE_URL,
@@ -1223,9 +1211,10 @@ def _decode_efr32_usart0_status(
         "diagnosis": diagnosis,
         "release": ZEROSTACK_RELEASE_NAME,
         "zero_stack_remediation": (
-            "SMLIGHT ZeroStack Release Zero (0.9.9-beta.1) currently ships on SMLIGHT TI "
-            "SimpleLink F2 coordinators (SLZB-06, SLZB-06U, SLZB-06P7, SLZB-06P7U, SLZB-06P7v1, "
-            "SLZB-07P7, SLZB-06P10, SLZB-07P10), while EFR32 support is in active development. "
+            "SMLIGHT ZeroStack (Release Zero) currently ships on SMLIGHT TI "
+            "SimpleLink F2 coordinators (SLZB-06, SLZB-MR2, SLZB-06P7, SLZB-07P7, SLZB-MR1, "
+            "SLZB-06P10, SLZB-07P10, SLZB-MR3, SLZB-MR4, SLZB-MRW10, SLZB-Ultima, incl. U "
+            "variants), while EFR32 support is in active development. "
             f"See {ZEROSTACK_MARKETING_URL}"
         ),
         "silicon_note_url": F2_SILICON_NOTE_URL,
@@ -1311,7 +1300,7 @@ def _decode_arm_scb_cfsr(val: int, family: RegisterChipFamily) -> RegisterDecode
             active_faults.append(f"MMFSR=0x{mmfsr:02x}, BFSR=0x{bfsr:02x}, UFSR=0x{ufsr:04x}")
         diagnosis = (
             f"CORTEX-M CONFIGURABLE FAULT (SCB:CFSR = 0x{word32:08x}; "
-            f"{'; '.join(active_faults)}). SMLIGHT ZeroStack (Release Zero 0.9.9-beta.1) is "
+            f"{'; '.join(active_faults)}). SMLIGHT ZeroStack (Release Zero) is "
             "verified against 3,255 adversarial 802.15.4 / NWK / APS / ZCL / OTA frames with "
             "0 crashes."
         )
@@ -1481,7 +1470,6 @@ def decode_silicon_register_impl(
     if (
         "SRCMATCH" in reg_norm
         or "SRC_MATCH" in reg_norm
-        or "RFC_RAM" in reg_norm
         or "2100" in reg_norm
         or "20001060" in reg_norm
     ):
@@ -1537,7 +1525,7 @@ def decode_silicon_register_impl(
 
     raise ValueError(
         f"Unknown SimpleLink F2 register '{register_or_addr}'. Supported F2 registers: "
-        "CMD_IEEE_RX, CMD_IEEE_CSMA, RFC_DBELL (0x40041014), RFC_RAM/SrcMatch (0x21000000), "
+        "CMD_IEEE_RX, CMD_IEEE_CSMA, RFC_DBELL (0x40041014), SRCMATCH (0x21000000), "
         "VIMS (0x40034000), PRCM_RFCMODEHWOPT (0x400821D4 / 0x580821D4 / 0x480821D4), "
         "UART0_FR (0x40001018), UART0_RSR/ECR (0x40001004), UART0_CTL (0x40001030), "
         "IOCFG0..47 (0x40081000..0x400810BC), AON_PMCTL_RESETCTL (0x40090028 / 0x58090028 / "
