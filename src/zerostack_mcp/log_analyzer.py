@@ -77,6 +77,14 @@ _ADAPTER_TIMEOUT_RE = re.compile(
     r"Opening\s+serial\s+port\s+timed\s+out|Adapter\s+startup\s+timed\s+out",
     re.IGNORECASE,
 )
+_NOT_COMMISSIONED_RE = re.compile(
+    r"Cannot\s+backup\s*-\s*adapter\s+not\s+commissioned",
+    re.IGNORECASE,
+)
+_CHANNEL_MASK_MISMATCH_RE = re.compile(
+    r"channel_mask[^\n]*11,\s*12,\s*13[^\n]*26|channel_mask[^\n]*mismatch",
+    re.IGNORECASE,
+)
 _LOG_TIMESTAMP_RE = re.compile(r"\[?(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?)")
 _VOLATILE_PAYLOAD_KEYS = frozenset({"linkquality", "last_seen", "update", "device", "elapsed"})
 
@@ -99,6 +107,8 @@ _ROOT_CAUSE_PRIORITY: dict[str, int] = {
     "EZSP_LEGACY_PROTOCOL_VERSION": 88,
     "ADAPTER_DISCOVERY_ERROR": 87,
     "ADAPTER_CONFIG_MISMATCH": 87,
+    "ADAPTER_NOT_COMMISSIONED": 87,
+    "CHANNEL_MASK_RESTORE_MISMATCH": 87,
     "ADAPTER_STARTUP_TIMEOUT": 86,
     "ZNP_0X10_MEM_ERROR": 86,
     "ZNP_0X11_BUFFER_FULL": 84,
@@ -695,6 +705,32 @@ def _detect_startup_and_link_issues(
             (
                 "Verify serial port path or TCP bridge reachability, confirm serial flow-control "
                 "settings for your adapter harness, and match UART framing."
+            ),
+        ),
+        (
+            _NOT_COMMISSIONED_RE,
+            "ADAPTER_NOT_COMMISSIONED",
+            "NOT_COMMISSIONED",
+            "zigbee",
+            "critical",
+            "issue-config-mismatch",
+            "Host Backup Failed — Adapter Not Commissioned",
+            (
+                "Host attempted a coordinator backup while the adapter was uncommissioned or after "
+                "a failed start/restore. Restore or form the network cleanly before backup."
+            ),
+        ),
+        (
+            _CHANNEL_MASK_MISMATCH_RE,
+            "CHANNEL_MASK_RESTORE_MISMATCH",
+            "CHANNEL_MASK_MISMATCH",
+            "zigbee",
+            "critical",
+            "issue-channel-mismatch",
+            "Backup channel_mask Restore Mismatch / Reset Loop",
+            (
+                "coordinator_backup.json contains a 16-channel channel_mask ([11..26]) that "
+                "mismatches the single configured channel. Upgrade to zs-herdsman >= v0.1.2."
             ),
         ),
     )

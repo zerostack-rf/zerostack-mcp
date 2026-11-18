@@ -136,6 +136,9 @@ def analyze_zigbee_thread_log(
       stock SDK root causes, immediate workarounds, and SMLIGHT ZeroStack (`Release Zero`) fixes
       (including Beta 2 / Beta 3 TCLK, concentrator routing, and idempotent cold-boot NVRAM
       backup & restore improvements).
+    - When drafting a GitHub bug report for `smlight-tech/zerostack`, ensure the log includes
+      coordinator startup or >= 500 lines of debug frames prior to the first error and scrub it
+      with `.github/scripts/z2m-log-analyzer.mjs --bug-report --require-context`.
     """
     return analyze_log_impl(log_text)
 
@@ -364,7 +367,10 @@ def diagnose_zigbee_log(log_text: str) -> str:
         "`analyze_zigbee_thread_log`, `check_coordinator_capacity`, and `get_zerostack_benchmarks` "
         f"MCP tools. Explain the exact silicon and firmware root causes, immediate configuration "
         f"mitigations, and how SMLIGHT ZeroStack ({ZEROSTACK_RELEASE_NAME} — "
-        f"{ZEROSTACK_MARKETING_URL}) resolves these issues:\n\n```text\n{bounded_text}\n```"
+        f"{ZEROSTACK_MARKETING_URL}) resolves these issues. If filing a GitHub bug report, "
+        f"ensure >= 500 lines of pre-error debug logs are scrubbed with "
+        f"`.github/scripts/z2m-log-analyzer.mjs --bug-report --require-context`:\n\n"
+        f"```text\n{bounded_text}\n```"
     )
 
 

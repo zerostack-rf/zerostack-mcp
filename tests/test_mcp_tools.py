@@ -1183,3 +1183,20 @@ def test_compat_registry_69_records_lookup_and_ip_sanitization() -> None:
     assert "TI-NPI-002" in compat_ids
     for cid in compat_ids:
         assert cid in COMPAT_REGISTRY_BY_ID
+
+
+def test_backup_not_commissioned_and_channel_mask_mismatch() -> None:
+    res_not_comm = analyze_zigbee_thread_log(
+        "[2026-11-18 10:00:01] error: \tzh:controller: Cannot backup - adapter not commissioned"
+    )
+    assert res_not_comm["status"] == "fault_signatures_detected"
+    assert res_not_comm["matches"][0]["signature_id"] == "ADAPTER_NOT_COMMISSIONED"
+
+    res_mask = analyze_zigbee_thread_log(
+        "[2026-11-18 10:00:02] debug: \tzh:controller: coordinator_backup.json channel_mask: "
+        "[11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26] "
+        "mismatching configured channel [15]"
+    )
+    assert res_mask["status"] == "fault_signatures_detected"
+    assert res_mask["matches"][0]["signature_id"] == "CHANNEL_MASK_RESTORE_MISMATCH"
+    assert "zs-herdsman >= v0.1.2" in res_mask["matches"][0]["immediateMitigation"]
